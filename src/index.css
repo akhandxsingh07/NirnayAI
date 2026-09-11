@@ -8,6 +8,25 @@
   }
 }
 
+.nirnay-hero-video {
+  filter: sepia(0.12) saturate(0.82) contrast(0.92) brightness(1.03);
+  transform: scale(1.035);
+  animation: nirnay-cinematic-drift 18s ease-in-out infinite alternate;
+}
+
+.nirnay-video-grain {
+  opacity: 0.14;
+  mix-blend-mode: multiply;
+  background-image:
+    radial-gradient(circle at 20% 30%, rgba(102, 74, 41, 0.12) 0 0.7px, transparent 0.9px),
+    radial-gradient(circle at 80% 60%, rgba(102, 74, 41, 0.08) 0 0.7px, transparent 0.9px);
+  background-size: 23px 23px, 29px 29px;
+}
+
+.nirnay-dashboard-shell {
+  animation: nirnay-float 7s ease-in-out infinite;
+}
+
 .nirnay-rural-scene {
   opacity: 0.95;
   background:
@@ -36,6 +55,31 @@
 
 .nirnay-rural-scene::after {
   right: 5%;
+}
+
+@keyframes nirnay-cinematic-drift {
+  from {
+    transform: scale(1.035) translate3d(0, 0, 0);
+  }
+  to {
+    transform: scale(1.075) translate3d(-0.8%, -0.4%, 0);
+  }
+}
+
+@keyframes nirnay-float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nirnay-hero-video,
+  .nirnay-dashboard-shell {
+    animation: none !important;
+  }
 }
 
 @media print {
