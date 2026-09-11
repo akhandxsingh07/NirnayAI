@@ -176,6 +176,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [isPaused, setIsPaused] = useState(false);
   const [storyOpen, setStoryOpen] = useState(false);
   const copy = NAV_COPY[language] || NAV_COPY.en;
+  const featureBody = t('heroSupporting', language);
 
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -288,13 +289,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           <div className="mx-auto mb-7 max-w-[1380px]">
             <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-[#9A6A31]">NIRNAY AI</p>
             <h2 className="mt-2 font-display text-3xl text-[#2A1A10] sm:text-4xl">{t('appSubtitle', language)}</h2>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-[#796B5E]">{t('heroSupporting', language)}</p>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-[#796B5E]">{featureBody}</p>
           </div>
 
           <div className="mx-auto grid max-w-[1380px] gap-5 md:grid-cols-3">
-            <FeatureCard icon={<Landmark className="h-6 w-6" />} title={t('navSchemes', language)} text={t('schemeIntro', language)} onClick={() => onNavigate('schemes')} />
-            <FeatureCard icon={<FileText className="h-6 w-6" />} title={t('navReport', language)} text={t('reportIntro', language)} onClick={() => onNavigate('report')} />
-            <FeatureCard icon={<Lightbulb className="h-6 w-6" />} title={t('navAnalysis', language)} text={t('heroSupporting', language)} onClick={() => onNavigate('analysis')} />
+            <FeatureCard icon={<Landmark className="h-6 w-6" />} title={t('navSchemes', language)} text={featureBody} onClick={() => onNavigate('schemes')} />
+            <FeatureCard icon={<FileText className="h-6 w-6" />} title={t('navReport', language)} text={featureBody} onClick={() => onNavigate('report')} />
+            <FeatureCard icon={<Lightbulb className="h-6 w-6" />} title={t('navAnalysis', language)} text={featureBody} onClick={() => onNavigate('analysis')} />
           </div>
         </section>
 
@@ -318,7 +319,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <div className="grid lg:grid-cols-[1.45fr_.55fr]">
               <div className="bg-[#20150D]"><video autoPlay muted controls loop playsInline className="aspect-video h-full w-full object-cover">{ruralVideoSources.map((source) => <source key={source} src={source} type="video/mp4" />)}</video></div>
               <div className="flex flex-col justify-between p-6 sm:p-7">
-                <div><p className="text-sm leading-7 text-[#6D5E51]">{t('heroSupporting', language)}</p><div className="mt-5 space-y-3 text-sm text-[#5F5145]"><div className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#A97838]" />{t('navOpportunity', language)}</div><div className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#A97838]" />{t('navFinance', language)}</div><div className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#A97838]" />{t('navSchemes', language)}</div></div></div>
+                <div><p className="text-sm leading-7 text-[#6D5E51]">{featureBody}</p><div className="mt-5 space-y-3 text-sm text-[#5F5145]"><div className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#A97838]" />{t('navOpportunity', language)}</div><div className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#A97838]" />{t('navFinance', language)}</div><div className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#A97838]" />{t('navSchemes', language)}</div></div></div>
                 <button onClick={() => { setStoryOpen(false); onNavigate('assessment'); }} className="mt-7 rounded-xl bg-[#A97838] px-5 py-3.5 text-sm font-bold text-white transition hover:bg-[#8D5D28]">{t('btnStartAssessment', language)}</button>
               </div>
             </div>
