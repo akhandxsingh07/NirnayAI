@@ -145,6 +145,7 @@ export default function App() {
             <LandingPage
               onNavigate={navigateTo}
               language={language}
+              onLanguageChange={setLanguage}
               onTryDemo={handleTryDemo}
               onOpenHelp={() => setIsHelpOpen(true)}
             />
