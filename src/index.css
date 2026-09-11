@@ -1,34 +1,129 @@
 @import "tailwindcss";
 
+:root {
+  --nirnay-ivory: #fbf7ef;
+  --nirnay-cream: #f8f2e8;
+  --nirnay-card: #fffdf8;
+  --nirnay-ink: #281c13;
+  --nirnay-coffee: #6f471f;
+  --nirnay-gold: #a97838;
+  --nirnay-gold-soft: #d8b27a;
+  --nirnay-sage: #6d7f50;
+  --nirnay-border: #e3d6c5;
+}
+
 @layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
     font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: #F8F2E8;
-    color: #281C13;
+    background:
+      radial-gradient(circle at 78% 6%, rgba(210, 181, 137, 0.13), transparent 27%),
+      linear-gradient(180deg, var(--nirnay-ivory) 0%, var(--nirnay-cream) 100%);
+    color: var(--nirnay-ink);
+  }
+
+  ::selection {
+    background: rgba(169, 120, 56, 0.2);
+    color: var(--nirnay-ink);
   }
 }
 
+/*
+ * Hero film treatment
+ * The video remains readable behind copy, but is intentionally much more visible
+ * on the right half of the hero so the rural setting feels alive instead of decorative.
+ */
 .nirnay-hero-video {
-  filter: sepia(0.12) saturate(0.82) contrast(0.92) brightness(1.03);
-  transform: scale(1.035);
-  animation: nirnay-cinematic-drift 18s ease-in-out infinite alternate;
+  opacity: 0.9;
+  filter: sepia(0.06) saturate(0.98) contrast(1.02) brightness(0.94);
+  transform: scale(1.055);
+  transform-origin: center 46%;
+  animation: nirnay-cinematic-drift 13s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate;
+  will-change: transform, filter;
+}
+
+/* Override the two Tailwind overlay layers directly after the hero video. */
+.nirnay-hero-video + div {
+  background: linear-gradient(
+    90deg,
+    rgba(251, 247, 239, 0.96) 0%,
+    rgba(251, 247, 239, 0.90) 29%,
+    rgba(251, 247, 239, 0.72) 48%,
+    rgba(251, 247, 239, 0.42) 70%,
+    rgba(251, 247, 239, 0.25) 100%
+  ) !important;
+}
+
+.nirnay-hero-video + div + div {
+  background:
+    radial-gradient(circle at 76% 30%, rgba(211, 171, 108, 0.14), transparent 24%),
+    linear-gradient(180deg, rgba(255, 253, 248, 0.08), rgba(239, 222, 196, 0.30)) !important;
+  animation: nirnay-ambient-light 8s ease-in-out infinite alternate;
 }
 
 .nirnay-video-grain {
-  opacity: 0.14;
+  opacity: 0.065;
   mix-blend-mode: multiply;
   background-image:
-    radial-gradient(circle at 20% 30%, rgba(102, 74, 41, 0.12) 0 0.7px, transparent 0.9px),
-    radial-gradient(circle at 80% 60%, rgba(102, 74, 41, 0.08) 0 0.7px, transparent 0.9px);
+    radial-gradient(circle at 20% 30%, rgba(102, 74, 41, 0.11) 0 0.65px, transparent 0.9px),
+    radial-gradient(circle at 80% 60%, rgba(102, 74, 41, 0.075) 0 0.65px, transparent 0.9px);
   background-size: 23px 23px, 29px 29px;
+  animation: nirnay-grain-drift 15s linear infinite;
 }
 
+/* Professional floating product preview with a restrained glass highlight. */
 .nirnay-dashboard-shell {
-  animation: nirnay-float 7s ease-in-out infinite;
+  position: relative;
+  isolation: isolate;
+  animation: nirnay-float 5.6s ease-in-out infinite;
+  box-shadow:
+    0 34px 76px rgba(71, 46, 25, 0.15),
+    0 7px 22px rgba(71, 46, 25, 0.07) !important;
+  transition: transform 300ms ease, box-shadow 300ms ease;
+  will-change: transform;
 }
 
+.nirnay-dashboard-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+.nirnay-dashboard-shell::after {
+  content: '';
+  position: absolute;
+  z-index: 19;
+  pointer-events: none;
+  top: -35%;
+  left: -45%;
+  width: 40%;
+  height: 180%;
+  transform: rotate(18deg);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.22),
+    transparent
+  );
+  animation: nirnay-dashboard-sheen 8s ease-in-out infinite;
+}
+
+.nirnay-dashboard-shell:hover {
+  box-shadow:
+    0 40px 90px rgba(71, 46, 25, 0.18),
+    0 8px 24px rgba(71, 46, 25, 0.08) !important;
+}
+
+/* Rural illustration fallback also breathes gently when video is unavailable. */
 .nirnay-rural-scene {
-  opacity: 0.95;
+  opacity: 0.72;
   background:
     radial-gradient(ellipse at 5% 64%, rgba(142, 145, 101, 0.22) 0 4%, transparent 4.8%),
     radial-gradient(ellipse at 12% 70%, rgba(170, 150, 111, 0.18) 0 5%, transparent 5.7%),
@@ -36,6 +131,7 @@
     radial-gradient(ellipse at 96% 68%, rgba(176, 157, 118, 0.16) 0 5%, transparent 5.6%),
     linear-gradient(to top, rgba(222, 207, 183, 0.72) 0 26%, rgba(238, 228, 210, 0.28) 26% 50%, transparent 50%);
   filter: saturate(0.9);
+  animation: nirnay-rural-breathe 10s ease-in-out infinite alternate;
 }
 
 .nirnay-rural-scene::before,
@@ -57,27 +153,119 @@
   right: 5%;
 }
 
+/* Slightly richer, more premium hover behaviour across the landing-page controls. */
+#solutions button {
+  position: relative;
+  overflow: hidden;
+}
+
+#solutions button::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.34), transparent 44%);
+  transition: opacity 250ms ease;
+}
+
+#solutions button:hover::after {
+  opacity: 1;
+}
+
 @keyframes nirnay-cinematic-drift {
+  0% {
+    transform: scale(1.055) translate3d(0, 0, 0);
+    filter: sepia(0.06) saturate(0.94) contrast(1.02) brightness(0.94);
+  }
+  45% {
+    transform: scale(1.09) translate3d(-1.25%, -0.45%, 0);
+    filter: sepia(0.04) saturate(1.04) contrast(1.03) brightness(0.97);
+  }
+  100% {
+    transform: scale(1.12) translate3d(1.05%, -0.75%, 0);
+    filter: sepia(0.07) saturate(1) contrast(1.02) brightness(0.93);
+  }
+}
+
+@keyframes nirnay-ambient-light {
   from {
-    transform: scale(1.035) translate3d(0, 0, 0);
+    opacity: 0.82;
+    transform: translate3d(-0.4%, 0, 0);
   }
   to {
-    transform: scale(1.075) translate3d(-0.8%, -0.4%, 0);
+    opacity: 1;
+    transform: translate3d(0.5%, -0.2%, 0);
+  }
+}
+
+@keyframes nirnay-grain-drift {
+  from {
+    background-position: 0 0, 0 0;
+  }
+  to {
+    background-position: 46px 23px, -29px 58px;
   }
 }
 
 @keyframes nirnay-float {
   0%, 100% {
-    transform: translateY(0);
+    transform: translate3d(0, 0, 0);
   }
   50% {
-    transform: translateY(-6px);
+    transform: translate3d(0, -10px, 0);
+  }
+}
+
+@keyframes nirnay-dashboard-sheen {
+  0%, 58% {
+    transform: translateX(0) rotate(18deg);
+    opacity: 0;
+  }
+  68% {
+    opacity: 0.75;
+  }
+  88%, 100% {
+    transform: translateX(440%) rotate(18deg);
+    opacity: 0;
+  }
+}
+
+@keyframes nirnay-rural-breathe {
+  from {
+    transform: translate3d(0, 2px, 0) scale(1);
+  }
+  to {
+    transform: translate3d(-0.25%, -2px, 0) scale(1.012);
+  }
+}
+
+@media (max-width: 900px) {
+  .nirnay-hero-video {
+    opacity: 0.72;
+  }
+
+  .nirnay-hero-video + div {
+    background: linear-gradient(
+      90deg,
+      rgba(251, 247, 239, 0.96) 0%,
+      rgba(251, 247, 239, 0.88) 52%,
+      rgba(251, 247, 239, 0.66) 100%
+    ) !important;
+  }
+
+  .nirnay-dashboard-shell {
+    animation-duration: 7s;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .nirnay-hero-video,
-  .nirnay-dashboard-shell {
+  .nirnay-dashboard-shell,
+  .nirnay-video-grain,
+  .nirnay-rural-scene,
+  .nirnay-dashboard-shell::after,
+  .nirnay-hero-video + div + div {
     animation: none !important;
   }
 }
@@ -87,9 +275,11 @@
     background-color: #ffffff !important;
     color: #000000 !important;
   }
+
   .no-print {
     display: none !important;
   }
+
   .print-only {
     display: block !important;
   }
