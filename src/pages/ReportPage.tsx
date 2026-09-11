@@ -9,19 +9,14 @@ import {
   PageId,
 } from '../types';
 import { formatINR } from '../utils/financialCalculations';
-import { EvidenceBadge } from '../components/EvidenceBadge';
-import { t } from '../services/localizationService';
 import {
-  Printer,
-  FileCheck,
-  Building2,
-  Calendar,
-  CheckSquare,
-  ShieldAlert,
-  Award,
-  ExternalLink,
-  ArrowLeft,
-} from 'lucide-react';
+  getLocalizedFeasibilityStatus,
+  getReportCopy,
+  getReportDateLocale,
+  localizeCategory,
+  localizeDemoBusinessIdea,
+} from '../services/reportLocalization';
+import { ArrowLeft, Printer, ShieldAlert } from 'lucide-react';
 
 interface ReportPageProps {
   formData: AssessmentFormData;
@@ -44,288 +39,202 @@ export const ReportPage: React.FC<ReportPageProps> = ({
   onNavigate,
   language,
 }) => {
-  const handlePrint = () => {
-    window.print();
+  const copy = getReportCopy(language);
+  const businessIdea = localizeDemoBusinessIdea(formData.businessIdea, language);
+  const category = localizeCategory(formData.category, language);
+  const statusLabel = getLocalizedFeasibilityStatus(feasibilityScore.overallScore, language);
+  const localizedRecommendation = language === 'en' ? recommendation : copy.genericRecommendation;
+  const schemeRationale = language === 'en' ? financialData.schemeRationale : copy.genericSchemeRationale;
+  const localizedSwot = {
+    strengths: language === 'en' ? (swot?.strengths || []).join('; ') : copy.genericStrength,
+    weaknesses: language === 'en' ? (swot?.weaknesses || []).join('; ') : copy.genericWeakness,
+    opportunities: language === 'en' ? (swot?.opportunities || []).join('; ') : copy.genericOpportunity,
+    threats: language === 'en' ? (swot?.threats || []).join('; ') : copy.genericThreat,
   };
 
-  const nextSteps = [
-    {
-      title: 'Complete Free Udyam MSME Registration',
-      desc: 'Obtain statutory enterprise registration number on udyamregistration.gov.in using Aadhaar.',
-    },
-    {
-      title: 'Open Dedicated Enterprise Current Bank Account',
-      desc: 'Ensure all future business inflows and loan disbursements pass through a separate commercial account.',
-    },
-    {
-      title: 'Obtain 2 Dealer Machinery Quotations',
-      desc: 'Secure certified proforma invoices for the chilling unit, cans, and testing kit for bank appraisal.',
-    },
-    {
-      title: 'Confirm 5 Local Commercial Supply Agreements',
-      desc: 'Lock in informal written/verbal supply commitments with nearby tea stalls and sweet makers.',
-    },
-    {
-      title: 'Submit Application under Term Loan Scheme',
-      desc: 'Present this structured NIRNAY business plan to your local designated nodal agency or bank branch.',
-    },
-  ];
+  const handlePrint = () => window.print();
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 py-2">
-      {/* Top Action Header (hidden in print) */}
-      <div className="bg-white rounded-3xl border border-[#D9B99B]/40 p-6 shadow-xs flex flex-wrap items-center justify-between gap-4 print:hidden">
+    <div className="mx-auto max-w-4xl space-y-8 py-2" lang={language}>
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-[#D9B99B]/40 bg-white p-6 shadow-xs print:hidden">
         <div className="flex items-center gap-3">
           <button
             onClick={() => onNavigate('dashboard')}
-            className="p-2 rounded-xl bg-[#FAF7F3] border border-[#D9B99B]/60 text-[#4A2F24] hover:bg-[#F3E8DC] transition-colors"
+            aria-label="Back to dashboard"
+            className="rounded-xl border border-[#D9B99B]/60 bg-[#FAF7F3] p-2 text-[#4A2F24] transition-colors hover:bg-[#F3E8DC]"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="h-4 w-4" />
           </button>
           <div>
-            <h1 className="text-xl font-extrabold text-[#2B1B16]">
-              {t('reportTitle', language)}
-            </h1>
-            <span className="text-xs text-[#8B5E47]">
-              Comprehensive Decision-Support & Financing Dossier
-            </span>
+            <h1 className="text-xl font-extrabold text-[#2B1B16]">{copy.reportTitle}</h1>
+            <span className="text-xs text-[#8B5E47]">{copy.reportSubtitle}</span>
           </div>
         </div>
 
         <button
           onClick={handlePrint}
-          className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#4A2F24] hover:bg-[#2B1B16] text-white font-bold text-xs shadow-md transition-all"
+          className="flex items-center gap-2 rounded-xl bg-[#4A2F24] px-6 py-2.5 text-xs font-bold text-white shadow-md transition-all hover:bg-[#2B1B16]"
         >
-          <Printer className="w-4 h-4 text-[#D9B99B]" />
-          <span>{t('btnPrintPlan', language)}</span>
+          <Printer className="h-4 w-4 text-[#D9B99B]" />
+          <span>{language === 'en' ? 'Print / Save PDF' : copy.reportTitle}</span>
         </button>
       </div>
 
-      {/* Printable Formal Document Sheet */}
-      <div className="bg-white rounded-3xl border border-[#D9B99B]/60 p-6 sm:p-12 shadow-sm space-y-8 print:border-0 print:p-0 print:shadow-none text-[#2B1B16]">
-        {/* Document Formal Header */}
-        <div className="border-b-2 border-[#4A2F24] pb-6 flex flex-wrap items-start justify-between gap-4">
+      <div className="space-y-8 rounded-3xl border border-[#D9B99B]/60 bg-white p-6 text-[#2B1B16] shadow-sm print:border-0 print:p-0 print:shadow-none sm:p-12">
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b-2 border-[#4A2F24] pb-6">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded bg-[#4A2F24] text-white text-xs font-black">
-                NIRNAY AI
-              </span>
-              <span className="text-xs text-[#8B5E47] font-bold tracking-wider">
-                SIH26091 ENTERPRISE ADVISORY DOSSIER
-              </span>
+              <span className="rounded bg-[#4A2F24] px-2 py-0.5 text-xs font-black text-white">NIRNAY AI</span>
+              <span className="text-xs font-bold tracking-wider text-[#8B5E47]">{copy.dossierLabel}</span>
             </div>
-            <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#2B1B16] font-serif">
-              Comprehensive Rural Business Plan
-            </h2>
+            <h2 className="font-serif text-2xl font-extrabold tracking-tight text-[#2B1B16] sm:text-3xl">{copy.documentTitle}</h2>
             <p className="text-xs text-[#6B4535]">
-              Project: <span className="font-bold">{formData.businessIdea}</span> • Category: {formData.category}
+              {copy.project}: <span className="font-bold">{businessIdea}</span> • {copy.category}: {category}
             </p>
           </div>
 
-          <div className="text-right text-xs text-[#8B5E47] space-y-0.5 shrink-0">
-            <p><strong className="text-[#2B1B16]">Generated For:</strong> {formData.location.village}, {formData.location.district}</p>
-            <p><strong>State:</strong> {formData.location.state}</p>
-            <p><strong>Date:</strong> {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
-            <p className="text-[10px] text-[#8B5E47]">Document Ref: NAI-SIH26-091</p>
+          <div className="shrink-0 space-y-0.5 text-right text-xs text-[#8B5E47]">
+            <p><strong className="text-[#2B1B16]">{copy.generatedFor}:</strong> {formData.location.village}, {formData.location.district}</p>
+            <p><strong>{copy.state}:</strong> {formData.location.state}</p>
+            <p><strong>{copy.date}:</strong> {new Date().toLocaleDateString(getReportDateLocale(language), { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+            <p className="text-[10px] text-[#8B5E47]">{copy.documentRef}: NAI-SIH26-091</p>
           </div>
         </div>
 
-        {/* Section 1: Executive Summary */}
-        <div className="space-y-3">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-[#4A2F24] border-b border-[#F3E8DC] pb-1">
-            1. Executive Summary & Strategic Viability
-          </h3>
-          <p className="text-xs text-[#2B1B16] leading-relaxed">
-            This business advisory report provides a structured appraisal for establishing a{' '}
-            <strong>{formData.businessIdea}</strong> in <strong>{formData.location.village}</strong>, Block{' '}
-            <strong>{formData.location.block}</strong>, District <strong>{formData.location.district}</strong>. The enterprise proposal requires an estimated total capital outlay of{' '}
-            <strong>{formatINR(financialData.totalProjectCost)}</strong>, anchored by a committed 10% entrepreneur margin contribution of{' '}
-            <strong>{formatINR(financialData.entrepreneurMargin)}</strong>, and supported by 90% debt financing of{' '}
-            <strong>{formatINR(financialData.loanRequirement)}</strong> under the statutory{' '}
-            <strong>{financialData.recommendedScheme}</strong>.
+        <section className="space-y-3">
+          <h3 className="border-b border-[#F3E8DC] pb-1 text-sm font-bold uppercase tracking-wider text-[#4A2F24]">{copy.section1}</h3>
+          <p className="text-xs leading-relaxed text-[#2B1B16]">
+            {copy.summaryA} <strong>{businessIdea}</strong> — <strong>{formData.location.village}</strong>, {copy.block} <strong>{formData.location.block}</strong>, {copy.district} <strong>{formData.location.district}</strong>. {copy.summaryB} <strong>{formatINR(financialData.totalProjectCost)}</strong>; {copy.summaryC}
           </p>
-          <div className="p-3 rounded-xl bg-[#FAF7F3] border border-[#D9B99B]/40 text-xs text-[#6B4535]">
-            <strong>Algorithmic Feasibility Verdict:</strong> {feasibilityScore.overallScore}/100 — &quot;{feasibilityScore.statusLabel}&quot;. {recommendation}
+          <div className="rounded-xl border border-[#D9B99B]/40 bg-[#FAF7F3] p-3 text-xs text-[#6B4535]">
+            <strong>{copy.feasibilityVerdict}:</strong> {feasibilityScore.overallScore}/100 — “{statusLabel}”. {localizedRecommendation}
           </div>
-        </div>
+        </section>
 
-        {/* Section 2: Capital Architecture & Financing Structure */}
-        <div className="space-y-3">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-[#4A2F24] border-b border-[#F3E8DC] pb-1">
-            2. Capital Structure & Loan Terms
-          </h3>
+        <section className="space-y-3">
+          <h3 className="border-b border-[#F3E8DC] pb-1 text-sm font-bold uppercase tracking-wider text-[#4A2F24]">{copy.section2}</h3>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-            <div className="p-3 rounded-xl bg-[#FAF7F3] border border-[#D9B99B]/40">
-              <span className="text-[10px] text-[#8B5E47] block">10% Entrepreneur Margin</span>
-              <span className="text-base font-extrabold text-[#2B1B16]">
-                {formatINR(financialData.entrepreneurMargin)}
-              </span>
-            </div>
-            <div className="p-3 rounded-xl bg-[#FAF7F3] border border-[#D9B99B]/40">
-              <span className="text-[10px] text-[#8B5E47] block">100% Total Project Cost</span>
-              <span className="text-base font-extrabold text-[#6B4535]">
-                {formatINR(financialData.totalProjectCost)}
-              </span>
-            </div>
-            <div className="p-3 rounded-xl bg-[#FAF7F3] border border-[#D9B99B]/40">
-              <span className="text-[10px] text-[#8B5E47] block">90% Sanctioned Loan</span>
-              <span className="text-base font-extrabold text-[#474e30]">
-                {formatINR(financialData.loanRequirement)}
-              </span>
-            </div>
-            <div className="p-3 rounded-xl bg-[#FAF7F3] border border-[#D9B99B]/40">
-              <span className="text-[10px] text-[#8B5E47] block">Monthly Debt Service</span>
-              <span className="text-base font-extrabold text-[#2B1B16]">
-                {formatINR(financialData.monthlyEMI)}
-              </span>
-            </div>
+          <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
+            {[
+              [copy.entrepreneurMargin, formatINR(financialData.entrepreneurMargin), '#2B1B16'],
+              [copy.totalProjectCost, formatINR(financialData.totalProjectCost), '#6B4535'],
+              [copy.sanctionedLoan, formatINR(financialData.loanRequirement), '#474e30'],
+              [copy.monthlyDebtService, formatINR(financialData.monthlyEMI), '#2B1B16'],
+            ].map(([label, value, color]) => (
+              <div key={label} className="rounded-xl border border-[#D9B99B]/40 bg-[#FAF7F3] p-3">
+                <span className="block text-[10px] text-[#8B5E47]">{label}</span>
+                <span className="text-base font-extrabold" style={{ color }}>{value}</span>
+              </div>
+            ))}
           </div>
 
-          {/* Itemized Capital Deployment Table */}
-          <div className="border border-[#D9B99B]/50 rounded-xl overflow-hidden text-xs mt-3">
-            <table className="w-full text-left border-collapse">
-              <thead className="bg-[#FAF7F3] text-[#4A2F24] border-b border-[#D9B99B]/50">
+          <div className="mt-3 overflow-hidden rounded-xl border border-[#D9B99B]/50 text-xs">
+            <table className="w-full border-collapse text-left">
+              <thead className="border-b border-[#D9B99B]/50 bg-[#FAF7F3] text-[#4A2F24]">
                 <tr>
-                  <th className="p-2.5 font-bold">Capital Deployment Head</th>
-                  <th className="p-2.5 font-bold">Specification</th>
-                  <th className="p-2.5 font-bold text-right">Estimated Amount</th>
+                  <th className="p-2.5 font-bold">{copy.deploymentHead}</th>
+                  <th className="p-2.5 font-bold">{copy.specification}</th>
+                  <th className="p-2.5 text-right font-bold">{copy.estimatedAmount}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F3E8DC]">
                 <tr>
-                  <td className="p-2.5 font-semibold text-[#2B1B16]">Capital Expenditure (Capex)</td>
-                  <td className="p-2.5 text-[#4A2F24]">Machinery, chilling tanks, electronic fat testers, cans</td>
-                  <td className="p-2.5 font-bold text-right text-[#2B1B16]">{formatINR(financialData.breakdown.capexMachinery)}</td>
+                  <td className="p-2.5 font-semibold text-[#2B1B16]">{copy.capex}</td>
+                  <td className="p-2.5 text-[#4A2F24]">{copy.capexSpec}</td>
+                  <td className="p-2.5 text-right font-bold text-[#2B1B16]">{formatINR(financialData.breakdown.capexMachinery)}</td>
                 </tr>
                 <tr>
-                  <td className="p-2.5 font-semibold text-[#2B1B16]">Initial Inventory Stock</td>
-                  <td className="p-2.5 text-[#4A2F24]">Raw milk procurement buffer, testing reagents, food-grade packing</td>
-                  <td className="p-2.5 font-bold text-right text-[#2B1B16]">{formatINR(financialData.breakdown.initialInventory)}</td>
+                  <td className="p-2.5 font-semibold text-[#2B1B16]">{copy.inventory}</td>
+                  <td className="p-2.5 text-[#4A2F24]">{copy.inventorySpec}</td>
+                  <td className="p-2.5 text-right font-bold text-[#2B1B16]">{formatINR(financialData.breakdown.initialInventory)}</td>
                 </tr>
                 <tr>
-                  <td className="p-2.5 font-semibold text-[#2B1B16]">Working Capital Liquidity</td>
-                  <td className="p-2.5 text-[#4A2F24]">45-day operational cash cushion, electricity & diesel backup reserve</td>
-                  <td className="p-2.5 font-bold text-right text-[#2B1B16]">{formatINR(financialData.breakdown.workingCapital)}</td>
+                  <td className="p-2.5 font-semibold text-[#2B1B16]">{copy.workingCapital}</td>
+                  <td className="p-2.5 text-[#4A2F24]">{copy.workingCapitalSpec}</td>
+                  <td className="p-2.5 text-right font-bold text-[#2B1B16]">{formatINR(financialData.breakdown.workingCapital)}</td>
                 </tr>
-                <tr className="bg-[#FAF7F3] font-extrabold text-sm">
-                  <td className="p-2.5" colSpan={2}>Total Estimated Project Outlay</td>
+                <tr className="bg-[#FAF7F3] text-sm font-extrabold">
+                  <td className="p-2.5" colSpan={2}>{copy.totalOutlay}</td>
                   <td className="p-2.5 text-right text-[#6B4535]">{formatINR(financialData.totalProjectCost)}</td>
                 </tr>
               </tbody>
             </table>
           </div>
-        </div>
+        </section>
 
-        {/* Section 3: Scheme Recommendation */}
-        <div className="space-y-3">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-[#4A2F24] border-b border-[#F3E8DC] pb-1">
-            3. Statutory Scheme Recommendation
-          </h3>
-          <div className="p-4 rounded-xl bg-[#FAF7F3] border border-[#D9B99B]/40 text-xs space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-[#2B1B16] text-sm">
-                {financialData.recommendedScheme} (Option B)
-              </span>
-              <span className="px-2 py-0.5 rounded bg-[#6F7655]/15 text-[#474e30] font-bold">
-                8.0% p.a. • 7 Years Tenure
-              </span>
+        <section className="space-y-3">
+          <h3 className="border-b border-[#F3E8DC] pb-1 text-sm font-bold uppercase tracking-wider text-[#4A2F24]">{copy.section3}</h3>
+          <div className="space-y-2 rounded-xl border border-[#D9B99B]/40 bg-[#FAF7F3] p-4 text-xs">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-bold text-[#2B1B16]">{financialData.recommendedScheme} ({copy.optionB})</span>
+              <span className="rounded bg-[#6F7655]/15 px-2 py-0.5 font-bold text-[#474e30]">{copy.rateTenure}</span>
             </div>
-            <p className="text-[#4A2F24] leading-relaxed">
-              {financialData.schemeRationale}
-            </p>
-            <div className="pt-2 border-t border-[#D9B99B]/30 flex flex-wrap gap-4 text-[#6B4535] text-[11px] font-semibold">
-              <span>Moratorium: {financialData.moratoriumMonths} Months Grace</span>
+            <p className="leading-relaxed text-[#4A2F24]">{schemeRationale}</p>
+            <div className="flex flex-wrap gap-4 border-t border-[#D9B99B]/30 pt-2 text-[11px] font-semibold text-[#6B4535]">
+              <span>{copy.moratorium}: {financialData.moratoriumMonths} {copy.monthsGrace}</span>
               <span>•</span>
-              <span>Estimated Break-even: {growthData.breakEvenMonths} Months</span>
+              <span>{copy.estimatedBreakEven}: {growthData.breakEvenMonths} {copy.months}</span>
               <span>•</span>
-              <span>Monthly Net Profit: {formatINR(growthData.projectedMonthlyProfit)}</span>
+              <span>{copy.monthlyNetProfit}: {formatINR(growthData.projectedMonthlyProfit)}</span>
             </div>
           </div>
-        </div>
+        </section>
 
-        {/* Section 4: SWOT Overview */}
-        <div className="space-y-3">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-[#4A2F24] border-b border-[#F3E8DC] pb-1">
-            4. SWOT Strategic Matrix
-          </h3>
-          <div className="grid grid-cols-2 gap-3 text-xs">
-            <div className="p-3 rounded-xl bg-[#FAF7F3] border border-[#D9B99B]/40 space-y-1">
-              <span className="font-bold text-[#474e30]">Strengths:</span>
-              <p className="text-[#4A2F24] leading-relaxed">{(swot?.strengths || []).join('; ')}</p>
-            </div>
-            <div className="p-3 rounded-xl bg-[#FAF7F3] border border-[#D9B99B]/40 space-y-1">
-              <span className="font-bold text-[#8B5E47]">Weaknesses:</span>
-              <p className="text-[#4A2F24] leading-relaxed">{(swot?.weaknesses || []).join('; ')}</p>
-            </div>
-            <div className="p-3 rounded-xl bg-[#FAF7F3] border border-[#D9B99B]/40 space-y-1">
-              <span className="font-bold text-[#6B4535]">Opportunities:</span>
-              <p className="text-[#4A2F24] leading-relaxed">{(swot?.opportunities || []).join('; ')}</p>
-            </div>
-            <div className="p-3 rounded-xl bg-[#FAF7F3] border border-[#D9B99B]/40 space-y-1">
-              <span className="font-bold text-amber-800">Threats & Mitigations:</span>
-              <p className="text-[#4A2F24] leading-relaxed">{(swot?.threats || []).join('; ')}</p>
-            </div>
+        <section className="space-y-3">
+          <h3 className="border-b border-[#F3E8DC] pb-1 text-sm font-bold uppercase tracking-wider text-[#4A2F24]">{copy.section4}</h3>
+          <div className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
+            <SwotCard label={copy.strengths} text={localizedSwot.strengths} labelClass="text-[#474e30]" />
+            <SwotCard label={copy.weaknesses} text={localizedSwot.weaknesses} labelClass="text-[#8B5E47]" />
+            <SwotCard label={copy.opportunities} text={localizedSwot.opportunities} labelClass="text-[#6B4535]" />
+            <SwotCard label={copy.threats} text={localizedSwot.threats} labelClass="text-amber-800" />
           </div>
-        </div>
+        </section>
 
-        {/* Section 5: Action Checklist */}
-        <div className="space-y-3">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-[#4A2F24] border-b border-[#F3E8DC] pb-1">
-            5. Entrepreneur On-Ground Action Checklist
-          </h3>
+        <section className="space-y-3">
+          <h3 className="border-b border-[#F3E8DC] pb-1 text-sm font-bold uppercase tracking-wider text-[#4A2F24]">{copy.section5}</h3>
           <div className="space-y-2 text-xs">
-            {nextSteps.map((step, idx) => (
-              <div
-                key={idx}
-                className="flex items-start gap-2.5 p-2.5 rounded-lg bg-[#FAF7F3] border border-[#D9B99B]/40"
-              >
-                <div className="w-5 h-5 rounded-md bg-white border border-[#D9B99B]/70 flex items-center justify-center text-[10px] font-bold text-[#4A2F24] shrink-0 mt-0.5">
-                  {idx + 1}
-                </div>
+            {copy.nextSteps.map((step, idx) => (
+              <div key={step.title} className="flex items-start gap-2.5 rounded-lg border border-[#D9B99B]/40 bg-[#FAF7F3] p-2.5">
+                <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-[#D9B99B]/70 bg-white text-[10px] font-bold text-[#4A2F24]">{idx + 1}</div>
                 <div>
                   <span className="font-bold text-[#2B1B16]">{step.title}</span>
-                  <p className="text-[11px] text-[#4A2F24] mt-0.5 leading-relaxed">
-                    {step.desc}
-                  </p>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-[#4A2F24]">{step.desc}</p>
                 </div>
               </div>
             ))}
           </div>
-        </div>
+        </section>
 
-        {/* Section 6: Research References */}
-        <div className="p-4 rounded-xl bg-[#FAF7F3] border border-[#D9B99B]/40 text-xs space-y-2">
-          <span className="font-bold text-[#2B1B16] block">
-            Institutional References & Methodology:
-          </span>
-          <p className="text-[#4A2F24] leading-relaxed">
-            Data models adapted from Reserve Bank of India (RBI) Small Entrepreneur Guidelines, Ministry of MSME Udyam classification parameters, and Acumen/WEF research on assisted digital welfare discovery (Haqdarshak case benchmark).
-          </p>
-        </div>
+        <section className="space-y-2 rounded-xl border border-[#D9B99B]/40 bg-[#FAF7F3] p-4 text-xs">
+          <span className="block font-bold text-[#2B1B16]">{copy.referencesTitle}:</span>
+          <p className="leading-relaxed text-[#4A2F24]">{copy.referencesText}</p>
+        </section>
 
-        {/* Mandatory Prominent Disclaimer */}
-        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3 text-xs text-amber-900">
-          <ShieldAlert className="w-5 h-5 shrink-0 text-amber-700 mt-0.5" />
-          <div className="leading-relaxed">
-            <span className="font-bold">Official Disclaimer:</span> This report is an AI-assisted and rule-based decision-support prototype created by Team VYOMA for Smart India Hackathon 2026 (Problem Statement SIH26091). It does not constitute a legal loan sanction, formal credit endorsement, or financial guarantee. Actual credit terms and approvals remain solely subject to commercial underwriting by the lending financial institutions.
-          </div>
-        </div>
+        <section className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-900">
+          <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
+          <div className="leading-relaxed"><span className="font-bold">{copy.disclaimerTitle}:</span> {copy.disclaimerText}</div>
+        </section>
 
-        {/* Signature & Endorsement Block for Print */}
-        <div className="pt-8 border-t border-[#D9B99B]/60 grid grid-cols-2 gap-8 text-xs text-[#8B5E47]">
+        <div className="grid grid-cols-1 gap-8 border-t border-[#D9B99B]/60 pt-8 text-xs text-[#8B5E47] sm:grid-cols-2">
           <div className="space-y-6">
-            <p className="font-semibold text-[#2B1B16]">Entrepreneur Declaration:</p>
-            <div className="pt-4 border-b border-dashed border-[#8B5E47] w-48" />
-            <p>Applicant Signature / Thumb Impression</p>
+            <p className="font-semibold text-[#2B1B16]">{copy.declaration}:</p>
+            <div className="w-48 border-b border-dashed border-[#8B5E47] pt-4" />
+            <p>{copy.signature}</p>
           </div>
-          <div className="space-y-6 text-right">
-            <p className="font-semibold text-[#2B1B16]">Advisory System Verification:</p>
-            <p className="text-[#6B4535] font-bold">NIRNAY AI • Team VYOMA</p>
-            <p className="text-[10px]">Smart India Hackathon 2026 Prototype</p>
+          <div className="space-y-6 text-left sm:text-right">
+            <p className="font-semibold text-[#2B1B16]">{copy.verification}:</p>
+            <p className="font-bold text-[#6B4535]">NIRNAY AI • Team VYOMA</p>
+            <p className="text-[10px]">{copy.prototype}</p>
           </div>
         </div>
       </div>
     </div>
   );
 };
+
+const SwotCard: React.FC<{ label: string; text: string; labelClass: string }> = ({ label, text, labelClass }) => (
+  <div className="space-y-1 rounded-xl border border-[#D9B99B]/40 bg-[#FAF7F3] p-3">
+    <span className={`font-bold ${labelClass}`}>{label}:</span>
+    <p className="leading-relaxed text-[#4A2F24]">{text}</p>
+  </div>
+);
