@@ -1,0 +1,6 @@
+{
+  "name": "NIRNAY AI",
+  "description": "AI-Driven Hyper-Local Business Advisory & Financial Structuring Assistant for Rural Micro-Entrepreneurs by Team VYOMA for Smart India Hackathon 2026 (PS SIH26091)",
+  "requestFramePermissions": ["geolocation", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
