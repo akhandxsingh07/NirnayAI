@@ -1,5 +1,7 @@
 export type PageId =
   | 'landing'
+  | 'citizen-login'
+  | 'admin'
   | 'dashboard'
   | 'assessment'
   | 'opportunity'
@@ -19,6 +21,13 @@ export type LanguageCode =
   | 'kn'
   | 'gu'
   | 'pa';
+
+export interface CitizenSession {
+  displayName: string;
+  identifier: string;
+  method: 'mobile' | 'email';
+  verifiedAt: string;
+}
 
 export type BusinessCategory =
   | 'Dairy'
@@ -84,8 +93,8 @@ export interface MapMarkerItem {
   type: 'opportunity' | 'competitor' | 'gap' | 'customer';
   title: string;
   distanceKm: number;
-  x: number; // percentage on map 0-100
-  y: number; // percentage on map 0-100
+  x: number;
+  y: number;
   description: string;
   impact: 'High' | 'Medium' | 'Low';
 }
@@ -125,11 +134,11 @@ export interface SWOTData {
 }
 
 export interface FinancialPlanData {
-  availableMargin: number; // e.g. 50,000
-  projectCost: number; // Available Margin / 10% = 5,00,000
-  loanRequirement: number; // 90% of Project Cost = 4,50,000
-  marginPercentage: number; // 10%
-  loanPercentage: number; // 90%
+  availableMargin: number;
+  projectCost: number;
+  loanRequirement: number;
+  marginPercentage: number;
+  loanPercentage: number;
   workingCapital: number;
   equipmentCapital: number;
 }
@@ -142,7 +151,7 @@ export interface SchemeOption {
   agencySupportText: string;
   agencySupportPercent: number;
   maxAgencyAmount: number;
-  interestRate: number; // in % p.a.
+  interestRate: number;
   tenureYears: number;
   tenureMonths: number;
   moratoriumMonths: number;
