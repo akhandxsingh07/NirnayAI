@@ -3,7 +3,39 @@
 @layer base {
   body {
     font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #F8F2E8;
+    color: #281C13;
   }
+}
+
+.nirnay-rural-scene {
+  opacity: 0.95;
+  background:
+    radial-gradient(ellipse at 5% 64%, rgba(142, 145, 101, 0.22) 0 4%, transparent 4.8%),
+    radial-gradient(ellipse at 12% 70%, rgba(170, 150, 111, 0.18) 0 5%, transparent 5.7%),
+    radial-gradient(ellipse at 88% 59%, rgba(139, 143, 99, 0.18) 0 5%, transparent 5.6%),
+    radial-gradient(ellipse at 96% 68%, rgba(176, 157, 118, 0.16) 0 5%, transparent 5.6%),
+    linear-gradient(to top, rgba(222, 207, 183, 0.72) 0 26%, rgba(238, 228, 210, 0.28) 26% 50%, transparent 50%);
+  filter: saturate(0.9);
+}
+
+.nirnay-rural-scene::before,
+.nirnay-rural-scene::after {
+  content: '';
+  position: absolute;
+  bottom: 42px;
+  width: 90px;
+  height: 56px;
+  background: rgba(231, 217, 197, 0.92);
+  box-shadow: 0 18px 28px rgba(129, 99, 65, 0.08);
+}
+
+.nirnay-rural-scene::before {
+  left: 2%;
+}
+
+.nirnay-rural-scene::after {
+  right: 5%;
 }
 
 @media print {
