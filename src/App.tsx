@@ -22,13 +22,11 @@ import {
 } from './utils/financialCalculations';
 import { analyzeBusinessWithAI } from './services/aiService';
 
-// Layout & Global Components
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { VoiceAssistantModal } from './components/VoiceAssistantModal';
 import { SourcesModal } from './components/SourcesModal';
 
-// Pages
 import { LandingPage } from './pages/LandingPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { AssessmentPage } from './pages/AssessmentPage';
@@ -45,7 +43,6 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState<PageId>('landing');
   const [language, setLanguage] = useState<LanguageCode>('en');
 
-  // Enterprise Domain State
   const [formData, setFormData] = useState<AssessmentFormData>(DEMO_ASSESSMENT_DATA);
   const [feasibilityScore, setFeasibilityScore] = useState<FeasibilityScoreData>(DEMO_FEASIBILITY_SCORE);
   const [swot, setSwot] = useState<SWOTData>(DEMO_SWOT);
@@ -57,12 +54,10 @@ export default function App() {
   const [isAiGenerated, setIsAiGenerated] = useState<boolean>(false);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
 
-  // Modals & Mobile Drawer
   const [isVoiceOpen, setIsVoiceOpen] = useState<boolean>(false);
   const [isHelpOpen, setIsHelpOpen] = useState<boolean>(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
-  // Deterministic financial calculations strictly synchronized with formData.availableMargin
   const financialData: FinancialStructureData = useMemo(() => {
     return calculateFinancialStructure(formData.availableMargin || 50000);
   }, [formData.availableMargin]);
@@ -103,48 +98,49 @@ export default function App() {
       setOpportunityData(result.localOpportunity);
       setIsAiGenerated(result.isAiGenerated);
     } catch {
-      // Fallback already handled inside aiService
+      // Fallback is handled inside aiService.
     } finally {
       setIsAnalyzing(false);
     }
   };
 
-  return (
-    <div className="min-h-screen bg-[#FAF7F3] text-[#2B1B16] font-sans antialiased selection:bg-[#B9825B]/20 selection:text-[#2B1B16]">
-      {/* Sidebar for Navigation (visible across all pages or desktop) */}
-      <Sidebar
-        currentPage={currentPage}
-        onNavigate={navigateTo}
-        language={language}
-        onLanguageChange={setLanguage}
-        onOpenHelp={() => setIsHelpOpen(true)}
-        isOpenMobile={isMobileMenuOpen}
-        onCloseMobile={() => setIsMobileMenuOpen(false)}
-      />
+  const isLanding = currentPage === 'landing';
 
-      {/* Main Content Area (offset by sidebar on desktop) */}
-      <div className="lg:pl-64 flex flex-col min-h-screen">
-        {/* Sticky Top Header */}
-        <Header
+  return (
+    <div className="min-h-screen bg-[#F8F2E8] text-[#281C13] font-sans antialiased selection:bg-[#A97838]/20 selection:text-[#281C13]">
+      {!isLanding && (
+        <Sidebar
           currentPage={currentPage}
           onNavigate={navigateTo}
           language={language}
-          onOpenVoice={() => setIsVoiceOpen(true)}
+          onLanguageChange={setLanguage}
           onOpenHelp={() => setIsHelpOpen(true)}
-          onTryDemo={handleTryDemo}
-          onToggleMobileMenu={() => setIsMobileMenuOpen(true)}
+          isOpenMobile={isMobileMenuOpen}
+          onCloseMobile={() => setIsMobileMenuOpen(false)}
         />
+      )}
 
-        {/* Global Analyzing Banner if AI is running in background */}
+      <div className={`${isLanding ? '' : 'lg:pl-64'} flex flex-col min-h-screen`}>
+        {!isLanding && (
+          <Header
+            currentPage={currentPage}
+            onNavigate={navigateTo}
+            language={language}
+            onOpenVoice={() => setIsVoiceOpen(true)}
+            onOpenHelp={() => setIsHelpOpen(true)}
+            onTryDemo={handleTryDemo}
+            onToggleMobileMenu={() => setIsMobileMenuOpen(true)}
+          />
+        )}
+
         {isAnalyzing && (
-          <div className="bg-[#4A2F24] text-[#FAF7F3] text-xs px-4 py-2 flex items-center justify-center gap-2 border-b border-[#6B4535]">
-            <Sparkles className="w-4 h-4 text-[#D9B99B] animate-spin" />
+          <div className="bg-[#8B5E2C] text-[#FFFDF8] text-xs px-4 py-2 flex items-center justify-center gap-2 border-b border-[#A97838]">
+            <Sparkles className="w-4 h-4 text-[#F0DFC3] animate-spin" />
             <span>NIRNAY AI is computing hyper-local feasibility and structuring models...</span>
           </div>
         )}
 
-        {/* Page Container */}
-        <main className="flex-1 px-4 sm:px-8 py-6 max-w-7xl mx-auto w-full">
+        <main className={isLanding ? 'flex-1 w-full' : 'flex-1 px-4 sm:px-8 py-6 max-w-7xl mx-auto w-full'}>
           {currentPage === 'landing' && (
             <LandingPage
               onNavigate={navigateTo}
@@ -240,22 +236,22 @@ export default function App() {
         </main>
       </div>
 
-      {/* Persistent Floating "Ask NIRNAY" Voice Button (Bottom-Right) */}
-      <div className="fixed bottom-5 right-5 z-40 print:hidden">
-        <button
-          onClick={() => setIsVoiceOpen(true)}
-          className="flex items-center gap-2.5 px-4 py-3 rounded-full bg-[#4A2F24] hover:bg-[#2B1B16] text-white text-xs font-extrabold shadow-lg hover:shadow-xl hover:scale-105 transition-all border border-[#B9825B]/40 group"
-        >
-          <span className="relative flex h-3 w-3">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#B9825B] opacity-75" />
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-[#B9825B]" />
-          </span>
-          <Mic className="w-4 h-4 text-[#D9B99B] group-hover:rotate-12 transition-transform" />
-          <span className="tracking-wide">Ask NIRNAY</span>
-        </button>
-      </div>
+      {!isLanding && (
+        <div className="fixed bottom-5 right-5 z-40 print:hidden">
+          <button
+            onClick={() => setIsVoiceOpen(true)}
+            className="flex items-center gap-2.5 px-4 py-3 rounded-full bg-[#8B5E2C] hover:bg-[#6F471F] text-white text-xs font-extrabold shadow-lg hover:shadow-xl hover:scale-105 transition-all border border-[#C8A77C]/60 group"
+          >
+            <span className="relative flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#E1BF8F] opacity-75" />
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-[#E1BF8F]" />
+            </span>
+            <Mic className="w-4 h-4 text-[#F0DFC3] group-hover:rotate-12 transition-transform" />
+            <span className="tracking-wide">Ask NIRNAY</span>
+          </button>
+        </div>
+      )}
 
-      {/* Voice Assistant Modal */}
       <VoiceAssistantModal
         isOpen={isVoiceOpen}
         onClose={() => setIsVoiceOpen(false)}
@@ -270,7 +266,6 @@ export default function App() {
         }}
       />
 
-      {/* Sources & Case Study Modal */}
       <SourcesModal
         isOpen={isHelpOpen}
         onClose={() => setIsHelpOpen(false)}
