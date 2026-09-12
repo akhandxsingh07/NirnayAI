@@ -8,23 +8,21 @@ import {
   LanguageCode,
 } from '../types';
 import { formatINR } from '../utils/financialCalculations';
-import { EvidenceBadge, EvidenceLegendBar } from '../components/EvidenceBadge';
-import { t } from '../services/localizationService';
+import { demoT } from '../services/demoLocalization';
+import { DEMO_CITIES, DemoCityId } from '../utils/demoScenarios';
 import {
   LayoutDashboard,
   Sparkles,
-  MapPin,
   Calculator,
   Compass,
   TrendingUp,
   FileCheck,
   Play,
   ArrowRight,
-  ShieldCheck,
-  CheckCircle2,
   Mic,
-  Clock,
-  ExternalLink,
+  MapPin,
+  Lightbulb,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface DashboardPageProps {
@@ -33,7 +31,8 @@ interface DashboardPageProps {
   financialData: FinancialStructureData;
   growthData: GrowthProjectionData;
   onNavigate: (page: PageId) => void;
-  onTryDemo: () => void;
+  onTryDemo: (cityId?: DemoCityId) => void;
+  selectedDemoCity: DemoCityId;
   onOpenVoice: () => void;
   onOpenHelp: () => void;
   language: LanguageCode;
@@ -46,277 +45,150 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   growthData,
   onNavigate,
   onTryDemo,
+  selectedDemoCity,
   onOpenVoice,
-  onOpenHelp,
   language,
 }) => {
   const locString = `${formData.location.village}, ${formData.location.district} (${formData.location.state})`;
+  const selectedCity = DEMO_CITIES.find((city) => city.id === selectedDemoCity) || DEMO_CITIES[0];
+
+  const cards = [
+    {
+      label: demoT('feasibilityScore', language),
+      value: `${feasibilityScore.overallScore}/100`,
+      meta: feasibilityScore.statusLabel.split('—')[0],
+      action: demoT('exploreMetrics', language),
+      icon: Sparkles,
+      page: 'analysis' as PageId,
+    },
+    {
+      label: demoT('capitalArchitecture', language),
+      value: formatINR(financialData.totalProjectCost),
+      meta: `${demoT('fromMargin', language)} ${formatINR(financialData.entrepreneurMargin)}`,
+      action: demoT('viewEmi', language),
+      icon: Calculator,
+      page: 'finance' as PageId,
+    },
+    {
+      label: demoT('statutoryScheme', language),
+      value: financialData.recommendedScheme,
+      meta: financialData.schemeRationale || demoT('schemeSupport', language),
+      action: demoT('compareSchemes', language),
+      icon: Compass,
+      page: 'schemes' as PageId,
+    },
+    {
+      label: demoT('monthlyNetProfit', language),
+      value: formatINR(growthData.projectedMonthlyProfit),
+      meta: `${demoT('breakEven', language)} ${growthData.breakEvenMonths} ${demoT('months', language)}`,
+      action: demoT('inspectGrowth', language),
+      icon: TrendingUp,
+      page: 'growth' as PageId,
+    },
+  ];
 
   return (
-    <div className="space-y-8 py-2">
-      {/* Executive Welcome Cockpit Banner */}
-      <div className="bg-white rounded-3xl border border-[#D9B99B]/40 p-6 sm:p-8 shadow-xs flex flex-wrap items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="p-2 rounded-xl bg-[#FAF7F3] text-[#6B4535] border border-[#D9B99B]/50">
-              <LayoutDashboard className="w-5 h-5" />
-            </span>
-            <h1 className="text-xl sm:text-2xl font-extrabold text-[#2B1B16]">
-              {t('navDashboard', language)} Cockpit
+    <div className="space-y-6 py-2">
+      <section className="overflow-hidden rounded-3xl border border-[#D9B99B]/40 bg-white shadow-xs">
+        <div className="grid gap-6 p-6 sm:p-8 lg:grid-cols-[1fr_auto] lg:items-center">
+          <div>
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-2 rounded-full bg-[#F4E9DA] px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider text-[#6B4535]">
+                <LayoutDashboard className="h-3.5 w-3.5" />
+                {demoT('executiveCockpit', language)}
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#EEF1E5] px-3 py-1 text-[11px] font-bold text-[#59603F]">
+                <MapPin className="h-3.5 w-3.5" /> {formData.location.district}
+              </span>
+            </div>
+
+            <h1 className="max-w-4xl text-2xl font-black leading-tight text-[#2B1B16] sm:text-3xl">
+              {formData.businessIdea || formData.ideaText}
             </h1>
-          </div>
-          <p className="text-xs text-[#8B5E47]">
-            Active Evaluation: <strong className="text-[#2B1B16]">{formData.businessIdea}</strong> in{' '}
-            <span className="text-[#6B4535] font-semibold">{locString}</span>
-          </p>
-        </div>
+            <p className="mt-2 text-sm text-[#765849]">
+              {demoT('activeEvaluation', language)}: <span className="font-extrabold text-[#2B1B16]">{locString}</span>
+            </p>
 
-        {/* Action Triggers */}
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          <button
-            onClick={onTryDemo}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#FAF7F3] hover:bg-[#F3E8DC] text-[#4A2F24] border border-[#D9B99B]/70 text-xs font-bold transition-colors shadow-2xs"
-          >
-            <Play className="w-3.5 h-3.5 text-[#B9825B] fill-[#B9825B]" />
-            <span>Reset Demo (Rampur)</span>
-          </button>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <button
+                onClick={() => onNavigate('assessment')}
+                className="inline-flex items-center gap-2 rounded-xl bg-[#6B4535] px-4 py-2.5 text-xs font-extrabold text-white transition hover:bg-[#503126]"
+              >
+                <Lightbulb className="h-4 w-4" /> {demoT('businessAssessment', language)}
+              </button>
+              <button
+                onClick={onOpenVoice}
+                className="inline-flex items-center gap-2 rounded-xl bg-[#4A2F24] px-4 py-2.5 text-xs font-extrabold text-white transition hover:bg-[#2B1B16]"
+              >
+                <Mic className="h-4 w-4" /> {demoT('askNirnay', language)}
+              </button>
+              <button
+                onClick={() => onNavigate('report')}
+                className="inline-flex items-center gap-2 rounded-xl border border-[#D9B99B]/70 bg-[#FAF7F3] px-4 py-2.5 text-xs font-extrabold text-[#4A2F24] transition hover:bg-[#F3E8DC]"
+              >
+                <FileCheck className="h-4 w-4" /> {demoT('viewPlan', language)}
+              </button>
+            </div>
+          </div>
 
-          <button
-            onClick={onOpenVoice}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#4A2F24] hover:bg-[#2B1B16] text-white text-xs font-bold transition-all shadow-xs"
-          >
-            <Mic className="w-3.5 h-3.5 text-[#D9B99B]" />
-            <span>Ask NIRNAY</span>
-          </button>
-
-          <button
-            onClick={() => onNavigate('report')}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#6B4535] hover:bg-[#4A2F24] text-white text-xs font-bold transition-all shadow-xs"
-          >
-            <FileCheck className="w-3.5 h-3.5 text-[#D9B99B]" />
-            <span>View Plan</span>
-          </button>
-        </div>
-      </div>
-
-      {/* 4 Core Summary Indicator Cards */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Feasibility Score */}
-        <div
-          onClick={() => onNavigate('analysis')}
-          className="bg-white rounded-2xl border border-[#D9B99B]/40 p-5 shadow-xs hover:border-[#6B4535] transition-all cursor-pointer group flex flex-col justify-between"
-        >
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-[#8B5E47] uppercase tracking-wider">
-                Feasibility Score
-              </span>
-              <Sparkles className="w-4 h-4 text-[#6B4535] group-hover:rotate-12 transition-transform" />
-            </div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-black text-[#2B1B16]">
-                {feasibilityScore.overallScore}
-              </span>
-              <span className="text-xs text-[#8B5E47] font-semibold">/ 100</span>
-            </div>
-            <span className="inline-block text-[11px] font-bold text-[#474e30] bg-[#6F7655]/15 px-2 py-0.5 rounded">
-              {feasibilityScore.statusLabel.split('—')[0]}
-            </span>
-          </div>
-          <div className="pt-3 mt-3 border-t border-[#F3E8DC] text-[11px] font-bold text-[#6B4535] flex items-center justify-between">
-            <span>Explore SWOT & metrics</span>
-            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-          </div>
-        </div>
-
-        {/* Capital & Margin */}
-        <div
-          onClick={() => onNavigate('finance')}
-          className="bg-white rounded-2xl border border-[#D9B99B]/40 p-5 shadow-xs hover:border-[#6B4535] transition-all cursor-pointer group flex flex-col justify-between"
-        >
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-[#8B5E47] uppercase tracking-wider">
-                Capital Architecture
-              </span>
-              <Calculator className="w-4 h-4 text-[#6B4535] group-hover:scale-110 transition-transform" />
-            </div>
-            <div>
-              <span className="text-3xl font-black text-[#2B1B16]">
-                {formatINR(financialData.totalProjectCost)}
-              </span>
-              <span className="block text-[11px] text-[#8B5E47] mt-0.5">
-                From {formatINR(financialData.entrepreneurMargin)} margin
-              </span>
-            </div>
-            <span className="inline-block text-[11px] font-bold text-[#6B4535] bg-[#FAF7F3] px-2 py-0.5 rounded border border-[#D9B99B]/50">
-              Loan: {formatINR(financialData.loanRequirement)} (90%)
-            </span>
-          </div>
-          <div className="pt-3 mt-3 border-t border-[#F3E8DC] text-[11px] font-bold text-[#6B4535] flex items-center justify-between">
-            <span>View EMI & amortization</span>
-            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-          </div>
-        </div>
-
-        {/* Scheme Routing */}
-        <div
-          onClick={() => onNavigate('schemes')}
-          className="bg-white rounded-2xl border border-[#D9B99B]/40 p-5 shadow-xs hover:border-[#6B4535] transition-all cursor-pointer group flex flex-col justify-between"
-        >
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-[#8B5E47] uppercase tracking-wider">
-                Statutory Scheme
-              </span>
-              <Compass className="w-4 h-4 text-[#6B4535] group-hover:scale-110 transition-transform" />
-            </div>
-            <div>
-              <span className="text-base font-extrabold text-[#2B1B16] line-clamp-1">
-                {financialData.recommendedScheme}
-              </span>
-              <span className="block text-[11px] text-[#474e30] font-bold mt-0.5">
-                8% p.a. • 7 Years • 6M Grace
-              </span>
-            </div>
-            <span className="inline-block text-[11px] font-bold text-[#4A2F24] bg-[#F3E8DC] px-2 py-0.5 rounded">
-              Option B (Above ₹1.40L)
-            </span>
-          </div>
-          <div className="pt-3 mt-3 border-t border-[#F3E8DC] text-[11px] font-bold text-[#6B4535] flex items-center justify-between">
-            <span>Compare scheme options</span>
-            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-          </div>
-        </div>
-
-        {/* Break-even & Profit */}
-        <div
-          onClick={() => onNavigate('growth')}
-          className="bg-white rounded-2xl border border-[#D9B99B]/40 p-5 shadow-xs hover:border-[#6B4535] transition-all cursor-pointer group flex flex-col justify-between"
-        >
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-[#8B5E47] uppercase tracking-wider">
-                Monthly Net Profit
-              </span>
-              <TrendingUp className="w-4 h-4 text-[#6B4535] group-hover:scale-110 transition-transform" />
-            </div>
-            <div>
-              <span className="text-3xl font-black text-[#474e30]">
-                {formatINR(growthData.projectedMonthlyProfit)}
-              </span>
-              <span className="block text-[11px] text-[#8B5E47] mt-0.5">
-                After ₹{financialData.monthlyEMI.toLocaleString('en-IN')}/mo EMI
-              </span>
-            </div>
-            <span className="inline-block text-[11px] font-bold text-[#6B4535] bg-[#FAF7F3] px-2 py-0.5 rounded border border-[#D9B99B]/50">
-              Break-even in {growthData.breakEvenMonths} Months
-            </span>
-          </div>
-          <div className="pt-3 mt-3 border-t border-[#F3E8DC] text-[11px] font-bold text-[#6B4535] flex items-center justify-between">
-            <span>Inspect 3-yr growth curve</span>
-            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+          <div className="min-w-[220px] rounded-2xl border border-[#D9B99B]/60 bg-[#FAF7F3] p-4">
+            <div className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-[#8B5E47]">{demoT('selectCity', language)}</div>
+            <div className="mt-1 text-lg font-black text-[#2B1B16]">{selectedCity.label}</div>
+            <p className="mt-1 text-[11px] leading-relaxed text-[#765849]">{demoT('cityDemoHint', language)}</p>
+            <button
+              onClick={() => onTryDemo(selectedDemoCity)}
+              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#D9B99B]/70 bg-white px-3 py-2 text-xs font-extrabold text-[#6B4535] transition hover:bg-[#F3E8DC]"
+            >
+              <Play className="h-3.5 w-3.5 fill-[#B9825B] text-[#B9825B]" />
+              {demoT('resetDemo', language)} · {selectedCity.label}
+            </button>
           </div>
         </div>
       </section>
 
-      {/* Advisory Workflow Checklist */}
-      <section className="bg-white rounded-3xl border border-[#D9B99B]/40 p-6 sm:p-8 shadow-xs space-y-4">
-        <div className="flex items-center justify-between border-b border-[#D9B99B]/30 pb-3">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-[#6F7655]" />
-            <h2 className="text-sm font-bold text-[#2B1B16] uppercase tracking-wider">
-              SIH26091 End-to-End Decision Status
-            </h2>
-          </div>
-          <span className="text-xs font-semibold text-[#474e30] bg-[#6F7655]/10 px-2.5 py-1 rounded-full">
-            All 5 Questions Resolved
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 text-xs">
-          <div
-            onClick={() => onNavigate('opportunity')}
-            className="p-3.5 rounded-xl bg-[#FAF7F3] border border-[#D9B99B]/50 hover:border-[#6B4535] cursor-pointer space-y-1 transition-all"
-          >
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-[#2B1B16]">Q1. Local Opportunity</span>
-              <CheckCircle2 className="w-3.5 h-3.5 text-[#6F7655]" />
-            </div>
-            <p className="text-[11px] text-[#4A2F24]">
-              High demand from tea stalls & 2 informal competitors within 5km.
-            </p>
-          </div>
-
-          <div
-            onClick={() => onNavigate('analysis')}
-            className="p-3.5 rounded-xl bg-[#FAF7F3] border border-[#D9B99B]/50 hover:border-[#6B4535] cursor-pointer space-y-1 transition-all"
-          >
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-[#2B1B16]">Q2. Idea Feasibility</span>
-              <CheckCircle2 className="w-3.5 h-3.5 text-[#6F7655]" />
-            </div>
-            <p className="text-[11px] text-[#4A2F24]">
-              Score 78/100 (Promising). Prioritize curd & paneer value addition.
-            </p>
-          </div>
-
-          <div
-            onClick={() => onNavigate('finance')}
-            className="p-3.5 rounded-xl bg-[#FAF7F3] border border-[#D9B99B]/50 hover:border-[#6B4535] cursor-pointer space-y-1 transition-all"
-          >
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-[#2B1B16]">Q3. Capital Outlay</span>
-              <CheckCircle2 className="w-3.5 h-3.5 text-[#6F7655]" />
-            </div>
-            <p className="text-[11px] text-[#4A2F24]">
-              Invest ₹50,000 margin for an eligible project cost of ₹5,00,000.
-            </p>
-          </div>
-
-          <div
-            onClick={() => onNavigate('finance')}
-            className="p-3.5 rounded-xl bg-[#FAF7F3] border border-[#D9B99B]/50 hover:border-[#6B4535] cursor-pointer space-y-1 transition-all"
-          >
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-[#2B1B16]">Q4. Loan Structure</span>
-              <CheckCircle2 className="w-3.5 h-3.5 text-[#6F7655]" />
-            </div>
-            <p className="text-[11px] text-[#4A2F24]">
-              ₹4,50,000 loan at 8% interest with 6-month moratorium grace.
-            </p>
-          </div>
-
-          <div
-            onClick={() => onNavigate('schemes')}
-            className="p-3.5 rounded-xl bg-[#FAF7F3] border border-[#D9B99B]/50 hover:border-[#6B4535] cursor-pointer space-y-1 transition-all"
-          >
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-[#2B1B16]">Q5. Scheme Support</span>
-              <CheckCircle2 className="w-3.5 h-3.5 text-[#6F7655]" />
-            </div>
-            <p className="text-[11px] text-[#4A2F24]">
-              Routed to Term Loan Scheme (Option B) for projects exceeding ₹1.40L.
-            </p>
-          </div>
-
-          <div
-            onClick={() => onNavigate('report')}
-            className="p-3.5 rounded-xl bg-[#4A2F24] text-white cursor-pointer space-y-1 hover:bg-[#2B1B16] transition-all"
-          >
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-white">Full Business Dossier</span>
-              <ArrowRight className="w-3.5 h-3.5 text-[#D9B99B]" />
-            </div>
-            <p className="text-[11px] text-[#D9B99B]">
-              Print-ready institutional report with KYC checklist.
-            </p>
-          </div>
-        </div>
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {cards.map((card) => {
+          const Icon = card.icon;
+          return (
+            <button
+              key={card.label}
+              onClick={() => onNavigate(card.page)}
+              className="group rounded-2xl border border-[#D9B99B]/40 bg-white p-5 text-left shadow-xs transition hover:-translate-y-0.5 hover:border-[#8B5E47]/70 hover:shadow-md"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#8B5E47]">{card.label}</span>
+                <Icon className="h-4 w-4 text-[#6B4535] transition group-hover:scale-110" />
+              </div>
+              <div className="mt-3 line-clamp-2 text-2xl font-black text-[#2B1B16]">{card.value}</div>
+              <div className="mt-1 line-clamp-2 min-h-8 text-[11px] leading-relaxed text-[#765849]">{card.meta}</div>
+              <div className="mt-4 flex items-center justify-between border-t border-[#F3E8DC] pt-3 text-[11px] font-extrabold text-[#6B4535]">
+                <span>{card.action}</span>
+                <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-1" />
+              </div>
+            </button>
+          );
+        })}
       </section>
 
-      {/* Global Evidence Legend */}
-      <EvidenceLegendBar />
+      <section className="grid gap-4 lg:grid-cols-3">
+        <button onClick={() => onNavigate('opportunity')} className="rounded-2xl border border-[#D9B99B]/40 bg-white p-5 text-left transition hover:border-[#8B5E47]/70">
+          <MapPin className="h-5 w-5 text-[#8B5E47]" />
+          <h3 className="mt-3 text-sm font-black text-[#2B1B16]">{demoT('localOpportunityCard', language)}</h3>
+          <p className="mt-1 text-xs leading-relaxed text-[#765849]">{formData.targetMarket || `${formData.location.district} local customer demand and competition analysis.`}</p>
+        </button>
+
+        <button onClick={() => onNavigate('schemes')} className="rounded-2xl border border-[#D9B99B]/40 bg-white p-5 text-left transition hover:border-[#8B5E47]/70">
+          <ShieldCheck className="h-5 w-5 text-[#6F7655]" />
+          <h3 className="mt-3 text-sm font-black text-[#2B1B16]">{demoT('schemeSupport', language)}</h3>
+          <p className="mt-1 text-xs leading-relaxed text-[#765849]">{financialData.recommendedScheme} · {formatINR(financialData.loanRequirement)} {demoT('loan', language)}</p>
+        </button>
+
+        <button onClick={() => onNavigate('report')} className="rounded-2xl border border-[#D9B99B]/40 bg-[#4A2F24] p-5 text-left text-white transition hover:bg-[#2B1B16]">
+          <FileCheck className="h-5 w-5 text-[#D9B99B]" />
+          <h3 className="mt-3 text-sm font-black">{demoT('report', language)}</h3>
+          <p className="mt-1 text-xs leading-relaxed text-[#E8D8CA]">{demoT('viewPlan', language)} →</p>
+        </button>
+      </section>
     </div>
   );
 };
