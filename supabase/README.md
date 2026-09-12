@@ -2,7 +2,7 @@
 
 Project ref: `nllkmunqdkznhnhfrric` (Mumbai / `ap-south-1`).
 
-The production backend now uses Supabase Auth + PostgreSQL with Row Level Security (RLS).
+The production backend uses Supabase Auth + PostgreSQL with Row Level Security (RLS), while the existing Express server continues to handle protected Gemini AI endpoints.
 
 ## Core tables
 
@@ -13,35 +13,41 @@ The production backend now uses Supabase Auth + PostgreSQL with Row Level Securi
 - `scheme_shortlists` — citizen scheme shortlist
 - `action_plan_tasks` — saved action-plan progress
 - `reports` — saved business reports
-- `admin_activity` — administrator audit activity
+- `admin_activity` — administrator-only audit activity
 
 ## Security model
 
 - Every authenticated user receives a `profiles` row automatically.
-- New accounts always start with role `citizen`.
 - RLS limits citizens to their own data.
-- Admin can read platform data through the database role check.
+- Admin access is checked in PostgreSQL rather than by browser-visible credentials.
+- A private single-row admin allowlist controls which email may receive the `admin` role.
 - A partial unique index allows only one `profiles.role = 'admin'` row in the entire project.
-- Citizens cannot promote themselves because their profile update policy requires the role to remain `citizen`.
+- Citizens cannot promote themselves because their profile update policy requires their role to remain `citizen`.
+- Internal `SECURITY DEFINER` helper functions live in the private schema and are not executable from the public API.
 
 ## Citizen authentication
 
-- Email uses Supabase passwordless email authentication (secure sign-in link by default).
+- Email uses Supabase passwordless email authentication.
 - Phone uses Supabase 6-digit SMS OTP.
 - Phone login requires an SMS provider configured in Supabase Auth (Twilio, Vonage, MessageBird, etc.).
 
-## Assign the one administrator
+## Single administrator
 
-1. Sign in once using the email that should become the administrator. This creates the Auth user and profile.
-2. Run the following SQL in a trusted admin context (replace the email):
+The authorised administrator email is stored only in the private database allowlist, not in frontend code or public environment variables.
 
-```sql
-update public.profiles
-set role = 'admin'
-where email = 'YOUR_ADMIN_EMAIL';
-```
+When the allowlisted email signs in for the first time, the Auth trigger creates its profile with `role = 'admin'`. All other accounts are created as citizens. The database rejects assigning a second admin.
 
-The database will reject assigning a second admin.
+## Automated backend workflow
+
+When a new assessment is saved, PostgreSQL automatically creates five action-plan tasks for that user:
+
+1. Complete Udyam registration
+2. Validate demand with local customers
+3. Collect supplier/equipment quotations
+4. Prepare identity, bank and scheme documents
+5. Schedule a financing discussion with the selected lender
+
+The database also records important events such as citizen registration, assessment creation, AI analysis creation, financial-plan creation and report creation in `admin_activity`. Task completion timestamps are maintained automatically.
 
 ## Local setup
 
