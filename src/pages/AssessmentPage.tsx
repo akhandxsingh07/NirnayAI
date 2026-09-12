@@ -46,6 +46,11 @@ type SchemeProfile = {
   tags: string[];
 };
 
+type ExpertiseOption = {
+  value: string;
+  labels: Record<LanguageCode, string>;
+};
+
 const UP_LOCATIONS = [
   'Lucknow',
   'Barabanki',
@@ -60,6 +65,58 @@ const UP_LOCATIONS = [
   'Bahraich',
   'Prayagraj',
 ];
+
+const EXPERTISE_FIELD_LABEL: Record<LanguageCode, string> = {
+  en: 'Expertise / skills',
+  hi: 'विशेषज्ञता / कौशल',
+  bn: 'দক্ষতা / স্কিল',
+  mr: 'कौशल्य / तज्ज्ञता',
+  ta: 'நிபுணத்துவம் / திறன்கள்',
+  te: 'నైపుణ్యం / నైపుణ్యాలు',
+  kn: 'ಪರಿಣಿತಿ / ಕೌಶಲ್ಯಗಳು',
+  gu: 'કુશળતા / નિષ્ણાતતા',
+  pa: 'ਮਾਹਰਤਾ / ਹੁਨਰ',
+};
+
+const EXPERTISE_HINT: Record<LanguageCode, string> = {
+  en: 'Choose the skill closest to your real experience. NirnayAI gives expertise the highest weight while ranking businesses.',
+  hi: 'अपनी वास्तविक क्षमता के सबसे करीब कौशल चुनें। व्यवसाय रैंकिंग में निर्णय AI विशेषज्ञता को सबसे अधिक महत्व देता है।',
+  bn: 'আপনার বাস্তব অভিজ্ঞতার কাছাকাছি দক্ষতা বেছে নিন। ব্যবসা র‍্যাঙ্কিংয়ে দক্ষতার ওজন সবচেয়ে বেশি।',
+  mr: 'तुमच्या वास्तविक अनुभवाशी सर्वात जवळचे कौशल्य निवडा. व्यवसाय रँकिंगमध्ये कौशल्याला सर्वाधिक वजन दिले जाते.',
+  ta: 'உங்கள் உண்மையான அனுபவத்திற்கு அருகிலான திறனைத் தேர்வு செய்யுங்கள். வணிக தரவரிசையில் திறனுக்கு அதிக முக்கியத்துவம் அளிக்கப்படுகிறது.',
+  te: 'మీ నిజమైన అనుభవానికి దగ్గరైన నైపుణ్యాన్ని ఎంచుకోండి. వ్యాపార ర్యాంకింగ్‌లో నైపుణ్యానికి ఎక్కువ ప్రాధాన్యం ఉంటుంది.',
+  kn: 'ನಿಮ್ಮ ನೈಜ ಅನುಭವಕ್ಕೆ ಹತ್ತಿರದ ಕೌಶಲ್ಯವನ್ನು ಆಯ್ಕೆಮಾಡಿ. ವ್ಯವಹಾರ ಶ್ರೇಯಾಂಕದಲ್ಲಿ ಕೌಶಲ್ಯಕ್ಕೆ ಹೆಚ್ಚಿನ ತೂಕ ನೀಡಲಾಗುತ್ತದೆ.',
+  gu: 'તમારા વાસ્તવિક અનુભવને સૌથી નજીકનું કૌશલ્ય પસંદ કરો. વ્યવસાય રેન્કિંગમાં કૌશલ્યને સૌથી વધુ વજન આપવામાં આવે છે.',
+  pa: 'ਆਪਣੇ ਅਸਲ ਤਜਰਬੇ ਦੇ ਸਭ ਤੋਂ ਨੇੜੇ ਹੁਨਰ ਨੂੰ ਚੁਣੋ। ਕਾਰੋਬਾਰ ਰੈਂਕਿੰਗ ਵਿੱਚ ਹੁਨਰ ਨੂੰ ਸਭ ਤੋਂ ਵੱਧ ਭਾਰ ਦਿੱਤਾ ਜਾਂਦਾ ਹੈ।',
+};
+
+const EXPERTISE_OPTIONS: ExpertiseOption[] = [
+  { value: 'agriculture', labels: { en: 'Agriculture / Farming', hi: 'कृषि / खेती', bn: 'কৃষি / চাষাবাদ', mr: 'शेती / कृषी', ta: 'விவசாயம்', te: 'వ్యవసాయం', kn: 'ಕೃಷಿ', gu: 'કૃષિ / ખેતી', pa: 'ਖੇਤੀਬਾੜੀ' } },
+  { value: 'dairy', labels: { en: 'Dairy', hi: 'डेयरी', bn: 'ডেইরি', mr: 'दुग्ध व्यवसाय', ta: 'பால் தொழில்', te: 'డెయిరీ', kn: 'ಹೈನುಗಾರಿಕೆ', gu: 'ડેરી', pa: 'ਡੇਅਰੀ' } },
+  { value: 'poultry', labels: { en: 'Poultry', hi: 'पोल्ट्री', bn: 'পোল্ট্রি', mr: 'कुक्कुटपालन', ta: 'கோழிப்பண்ணை', te: 'పౌల్ట్రీ', kn: 'ಕೋಳಿ ಸಾಕಣೆ', gu: 'પોલ્ટ્રી', pa: 'ਪੋਲਟਰੀ' } },
+  { value: 'food', labels: { en: 'Food Processing / Cooking', hi: 'फूड प्रोसेसिंग / खाना', bn: 'খাদ্য প্রক্রিয়াকরণ', mr: 'अन्न प्रक्रिया', ta: 'உணவு பதப்படுத்தல்', te: 'ఆహార ప్రాసెసింగ్', kn: 'ಆಹಾರ ಸಂಸ್ಕರಣೆ', gu: 'ફૂડ પ્રોસેસિંગ', pa: 'ਫੂਡ ਪ੍ਰੋਸੈਸਿੰਗ' } },
+  { value: 'tailoring', labels: { en: 'Tailoring / Fashion', hi: 'सिलाई / फैशन', bn: 'সেলাই / ফ্যাশন', mr: 'शिवणकाम / फॅशन', ta: 'தையல் / ஃபேஷன்', te: 'టైలరింగ్ / ఫ్యాషన్', kn: 'ಟೈಲರಿಂಗ್ / ಫ್ಯಾಷನ್', gu: 'ટેલરિંગ / ફેશન', pa: 'ਸਿਲਾਈ / ਫੈਸ਼ਨ' } },
+  { value: 'electronics', labels: { en: 'Electronics / Repair', hi: 'इलेक्ट्रॉनिक्स / रिपेयर', bn: 'ইলেকট্রনিক্স / রিপেয়ার', mr: 'इलेक्ट्रॉनिक्स / दुरुस्ती', ta: 'மின்னணு / பழுது', te: 'ఎలక్ట్రానిక్స్ / రిపేర్', kn: 'ಎಲೆಕ್ಟ್ರಾನಿಕ್ಸ್ / ರಿಪೇರಿ', gu: 'ઇલેક્ટ્રોનિક્સ / રિપેર', pa: 'ਇਲੈਕਟ੍ਰਾਨਿਕਸ / ਰਿਪੇਅਰ' } },
+  { value: 'digital', labels: { en: 'Digital Marketing / Social Media', hi: 'डिजिटल मार्केटिंग', bn: 'ডিজিটাল মার্কেটিং', mr: 'डिजिटल मार्केटिंग', ta: 'டிஜிட்டல் மார்க்கெட்டிங்', te: 'డిజిటల్ మార్కెటింగ్', kn: 'ಡಿಜಿಟಲ್ ಮಾರ್ಕೆಟಿಂಗ್', gu: 'ડિજિટલ માર્કેટિંગ', pa: 'ਡਿਜ਼ੀਟਲ ਮਾਰਕੀਟਿੰਗ' } },
+  { value: 'computer', labels: { en: 'Computer / Coding / IT', hi: 'कंप्यूटर / कोडिंग / IT', bn: 'কম্পিউটার / কোডিং', mr: 'कॉम्प्युटर / कोडिंग', ta: 'கணினி / கோடிங்', te: 'కంప్యూటర్ / కోడింగ్', kn: 'ಕಂಪ್ಯೂಟರ್ / ಕೋಡಿಂಗ್', gu: 'કમ્પ્યુટર / કોડિંગ', pa: 'ਕੰਪਿਊਟਰ / ਕੋਡਿੰਗ' } },
+  { value: 'handicraft', labels: { en: 'Handicraft / Artisan', hi: 'हस्तशिल्प / कारीगर', bn: 'হস্তশিল্প / কারিগর', mr: 'हस्तकला / कारागीर', ta: 'கைவினை / கலைஞர்', te: 'హస్తకళ / కళాకారుడు', kn: 'ಕರಕುಶಲ / ಕಾರಿಗ', gu: 'હસ્તકલા / કારીગર', pa: 'ਹੱਥਕਲਾ / ਕਾਰੀਗਰ' } },
+  { value: 'carpentry', labels: { en: 'Carpentry / Furniture', hi: 'बढ़ई / फर्नीचर', bn: 'কাঠের কাজ / ফার্নিচার', mr: 'सुतारकाम / फर्निचर', ta: 'தச்சு / மரச்சாமான்', te: 'కార్పెంట్రీ / ఫర్నిచర్', kn: 'ಮರಗೆಲಸ / ಫರ್ನಿಚರ್', gu: 'કારપેન્ટ્રી / ફર્નિચર', pa: 'ਕਾਰਪੈਂਟਰੀ / ਫਰਨੀਚਰ' } },
+  { value: 'solar', labels: { en: 'Solar / Electrical', hi: 'सोलर / इलेक्ट्रिकल', bn: 'সোলার / ইলেকট্রিক্যাল', mr: 'सोलर / इलेक्ट्रिकल', ta: 'சோலார் / மின்சாரம்', te: 'సోలార్ / ఎలక్ట్రికల్', kn: 'ಸೋಲಾರ್ / ಎಲೆಕ್ಟ್ರಿಕಲ್', gu: 'સોલાર / ઇલેક્ટ્રિકલ', pa: 'ਸੋਲਰ / ਇਲੈਕਟ੍ਰਿਕਲ' } },
+  { value: 'business', labels: { en: 'Retail / General Business', hi: 'रिटेल / सामान्य व्यापार', bn: 'রিটেল / সাধারণ ব্যবসা', mr: 'रिटेल / सामान्य व्यवसाय', ta: 'சில்லறை / பொது வணிகம்', te: 'రిటైల్ / సాధారణ వ్యాపారం', kn: 'ಚಿಲ್ಲರೆ / ಸಾಮಾನ್ಯ ವ್ಯವಹಾರ', gu: 'રિટેલ / સામાન્ય વ્યવસાય', pa: 'ਰਿਟੇਲ / ਆਮ ਕਾਰੋਬਾਰ' } },
+];
+
+const CATEGORY_EXPERTISE_DEFAULT: Partial<Record<BusinessCategory, string>> = {
+  Dairy: 'dairy',
+  Poultry: 'poultry',
+  'Food Processing': 'food',
+  Tailoring: 'tailoring',
+  Handicrafts: 'handicraft',
+  'Repair Services': 'electronics',
+  'Agriculture Services': 'agriculture',
+  'Small Manufacturing': 'business',
+  Retail: 'business',
+  Other: 'business',
+};
 
 const BUSINESS_OPTIONS: BusinessProfile[] = [
   {
@@ -156,7 +213,7 @@ const BUSINESS_OPTIONS: BusinessProfile[] = [
     minCapital: 70000,
     maxCapital: 800000,
     minLand: 0,
-    expertise: ['craft', 'handicraft', 'art', 'design', 'artisan'],
+    expertise: ['craft', 'handicraft', 'handicraft', 'art', 'design', 'artisan'],
     risk: 'Low',
     reason: 'Skill-driven enterprise that can start small and expand into online or tourism-linked sales.',
     schemeIds: ['PMVISHWAKARMA', 'VSSY', 'ODOP', 'CMYUVA', 'MUDRA', 'PMEGP'],
@@ -292,15 +349,15 @@ const SCHEMES: SchemeProfile[] = [
 const normalize = (value: string) => value.toLowerCase().trim();
 
 const capitalFit = (capital: number, min: number, max: number) => {
-  if (capital >= min && capital <= max) return 40;
-  if (capital < min) return Math.max(0, 40 - ((min - capital) / min) * 40);
-  return Math.max(15, 40 - ((capital - max) / Math.max(max, 1)) * 20);
+  if (capital >= min && capital <= max) return 30;
+  if (capital < min) return Math.max(0, 30 - ((min - capital) / min) * 30);
+  return Math.max(10, 30 - ((capital - max) / Math.max(max, 1)) * 15);
 };
 
-export const AssessmentPage: React.FC<AssessmentPageProps> = ({ initialData, onSubmit }) => {
+export const AssessmentPage: React.FC<AssessmentPageProps> = ({ initialData, onSubmit, language }) => {
   const [landArea, setLandArea] = useState<number>(0.25);
   const [capital, setCapital] = useState<number>(initialData.availableMargin || initialData.marginCapital || 300000);
-  const [expertise, setExpertise] = useState<string>('agriculture');
+  const [expertise, setExpertise] = useState<string>(CATEGORY_EXPERTISE_DEFAULT[initialData.category] || 'agriculture');
   const [stateName, setStateName] = useState<string>(initialData.location.state || 'Uttar Pradesh');
   const [district, setDistrict] = useState<string>(UP_LOCATIONS.includes(initialData.location.district) ? initialData.location.district : 'Lucknow');
   const [risk, setRisk] = useState<Risk>(initialData.riskWillingness || 'Medium');
@@ -313,8 +370,9 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ initialData, onS
 
     return BUSINESS_OPTIONS.map((business) => {
       const cFit = capitalFit(capital, business.minCapital, business.maxCapital);
-      const landFit = business.minLand === 0 ? 25 : landArea >= business.minLand ? 25 : Math.max(0, (landArea / business.minLand) * 25);
-      const skillFit = business.expertise.some((item) => skill.includes(item) || item.includes(skill)) ? 25 : skill.length > 2 ? 8 : 4;
+      const landFit = business.minLand === 0 ? 20 : landArea >= business.minLand ? 20 : Math.max(0, (landArea / business.minLand) * 20);
+      const hasSkillMatch = business.expertise.some((item) => skill === item || skill.includes(item) || item.includes(skill));
+      const skillFit = hasSkillMatch ? 40 : 5;
       const riskFit = business.risk === risk ? 10 : risk === 'High' ? 8 : business.risk === 'Low' ? 7 : 5;
       const score = Math.min(98, Math.round(cFit + landFit + skillFit + riskFit));
 
@@ -366,7 +424,7 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ initialData, onS
             </div>
             <h1 className="text-2xl font-black text-[#2B1B16] sm:text-3xl">Tell us what you have. We’ll tell you what fits.</h1>
             <p className="mt-2 max-w-3xl text-sm text-[#7A5A49]">
-              Enter land, capital, expertise and location. NirnayAI ranks business ideas and now compares multiple Central + Uttar Pradesh government support schemes for each match.
+              Enter land, capital, expertise and location. NirnayAI ranks business ideas and compares Central + Uttar Pradesh government support schemes for every strong match.
             </p>
           </div>
           <div className="rounded-2xl border border-[#D9B99B]/50 bg-[#FAF7F3] px-4 py-3 text-xs font-bold text-[#6B4535]">
@@ -392,10 +450,30 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ initialData, onS
             <input type="number" min="10000" step="10000" value={capital} onChange={(e) => setCapital(Number(e.target.value))} className="w-full rounded-xl border border-[#D9B99B]/60 bg-[#FAF7F3] px-4 py-3 outline-none focus:ring-2 focus:ring-[#D9B99B]" />
           </label>
 
-          <label className="space-y-2 text-xs font-bold text-[#2B1B16] md:col-span-2">
-            <span className="flex items-center gap-2"><UserRoundCog className="h-4 w-4 text-[#8B5E47]" />Expertise / skills</span>
-            <input value={expertise} onChange={(e) => setExpertise(e.target.value)} placeholder="e.g. agriculture, dairy, tailoring, electronics, digital marketing" className="w-full rounded-xl border border-[#D9B99B]/60 bg-[#FAF7F3] px-4 py-3 outline-none focus:ring-2 focus:ring-[#D9B99B]" />
-          </label>
+          <div className="space-y-3 md:col-span-2">
+            <div>
+              <span className="flex items-center gap-2 text-xs font-bold text-[#2B1B16]"><UserRoundCog className="h-4 w-4 text-[#8B5E47]" />{EXPERTISE_FIELD_LABEL[language]}</span>
+              <p className="mt-1 text-[11px] leading-relaxed text-[#8B5E47]">{EXPERTISE_HINT[language]}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+              {EXPERTISE_OPTIONS.map((option) => {
+                const selected = expertise === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => {
+                      setExpertise(option.value);
+                      setShowResults(false);
+                    }}
+                    className={`rounded-xl border px-3 py-2.5 text-left text-xs font-bold transition ${selected ? 'border-[#6B4535] bg-[#6B4535] text-white shadow-sm' : 'border-[#D9B99B]/60 bg-[#FAF7F3] text-[#4A2F24] hover:border-[#8B5E47] hover:bg-[#F3E8DC]'}`}
+                  >
+                    {option.labels[language]}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           <label className="space-y-2 text-xs font-bold text-[#2B1B16]">
             <span className="flex items-center gap-2"><MapPin className="h-4 w-4 text-[#8B5E47]" />State</span>
