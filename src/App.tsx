@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   PageId,
   LanguageCode,
@@ -22,6 +22,9 @@ import {
   generateGrowthProjections,
 } from './utils/financialCalculations';
 import { analyzeBusinessWithAI } from './services/aiService';
+import { getCurrentCitizenSession, signOut } from './services/authService';
+import { saveAssessmentBundle } from './services/backendService';
+import { supabase } from './lib/supabase';
 
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
@@ -83,12 +86,37 @@ export default function App() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
   const financialData: FinancialStructureData = useMemo(() => {
-    return calculateFinancialStructure(formData.availableMargin || 50000);
-  }, [formData.availableMargin]);
+    return calculateFinancialStructure(formData.availableMargin || formData.marginCapital || 50000);
+  }, [formData.availableMargin, formData.marginCapital]);
 
   const growthData: GrowthProjectionData = useMemo(() => {
-    return generateGrowthProjections(formData.availableMargin || 50000);
-  }, [formData.availableMargin]);
+    return generateGrowthProjections(formData.availableMargin || formData.marginCapital || 50000);
+  }, [formData.availableMargin, formData.marginCapital]);
+
+  useEffect(() => {
+    let active = true;
+
+    const syncCitizen = async () => {
+      const session = await getCurrentCitizenSession();
+      if (!active) return;
+      setCitizenSession(session);
+      if (session) {
+        localStorage.setItem(CITIZEN_SESSION_KEY, JSON.stringify(session));
+      } else {
+        localStorage.removeItem(CITIZEN_SESSION_KEY);
+      }
+    };
+
+    void syncCitizen();
+    const { data } = supabase.auth.onAuthStateChange(() => {
+      window.setTimeout(() => void syncCitizen(), 0);
+    });
+
+    return () => {
+      active = false;
+      data.subscription.unsubscribe();
+    };
+  }, []);
 
   const navigateTo = (page: PageId) => {
     setCurrentPage(page);
@@ -121,6 +149,11 @@ export default function App() {
       setRecommendation(result.recommendation);
       setOpportunityData(result.localOpportunity);
       setIsAiGenerated(result.isAiGenerated);
+
+      const calculatedFinance = calculateFinancialStructure(
+        newForm.availableMargin || newForm.marginCapital || 50000
+      );
+      void saveAssessmentBundle(newForm, result, calculatedFinance);
     } catch {
       // Fallback is handled inside aiService.
     } finally {
@@ -134,7 +167,8 @@ export default function App() {
     navigateTo('dashboard');
   };
 
-  const handleCitizenLogout = () => {
+  const handleCitizenLogout = async () => {
+    await signOut();
     localStorage.removeItem(CITIZEN_SESSION_KEY);
     setCitizenSession(null);
     navigateTo('landing');
