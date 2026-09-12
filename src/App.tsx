@@ -11,12 +11,17 @@ import {
   CitizenSession,
 } from './types';
 import {
-  DEMO_ASSESSMENT_DATA,
   DEMO_FEASIBILITY_SCORE,
   DEMO_SWOT,
   DEMO_AI_INSIGHTS,
-  DEMO_LOCAL_OPPORTUNITY,
 } from './utils/demoData';
+import {
+  DEFAULT_DEMO_CITY,
+  DemoCityId,
+  buildDemoAssessment,
+  buildDemoOpportunity,
+  getDemoCity,
+} from './utils/demoScenarios';
 import {
   calculateFinancialStructure,
   generateGrowthProjections,
@@ -52,7 +57,7 @@ const ACCESS_LABELS: Record<LanguageCode, { citizen: string; admin: string; acco
   mr: { citizen: 'नागरिक लॉगिन', admin: 'अॅडमिन', account: 'नागरिक खाते', logout: 'लॉगआउट' },
   ta: { citizen: 'குடிமக்கள் உள்நுழைவு', admin: 'நிர்வாகி', account: 'குடிமக்கள் கணக்கு', logout: 'வெளியேறு' },
   te: { citizen: 'పౌర లాగిన్', admin: 'అడ్మిన్', account: 'పౌర ఖాతా', logout: 'లాగౌట్' },
-  kn: { citizen: 'ನಾಗರಿಕ ಲಾಗಿನ್', admin: 'ಆಡ್ಮಿನ್', account: 'ನಾಗರಿಕ ಖಾತೆ', logout: 'ಲಾಗ್ ಔಟ್' },
+  kn: { citizen: 'ನಾಗರಿಕ ಲಾಗಿನ್', admin: 'ಅಡ್ಮಿನ್', account: 'ನಾಗರಿಕ ಖಾತೆ', logout: 'ಲಾಗ್ ಔಟ್' },
   gu: { citizen: 'નાગરિક લૉગિન', admin: 'એડમિન', account: 'નાગરિક ખાતું', logout: 'લૉગઆઉટ' },
   pa: { citizen: 'ਨਾਗਰਿਕ ਲਾਗਇਨ', admin: 'ਐਡਮਿਨ', account: 'ਨਾਗਰਿਕ ਖਾਤਾ', logout: 'ਲਾਗਆਉਟ' },
 };
@@ -62,6 +67,7 @@ const CITIZEN_SESSION_KEY = 'nirnay-citizen-session';
 export default function App() {
   const [currentPage, setCurrentPage] = useState<PageId>('landing');
   const [language, setLanguage] = useState<LanguageCode>('en');
+  const [selectedDemoCity, setSelectedDemoCity] = useState<DemoCityId>(DEFAULT_DEMO_CITY);
   const [citizenSession, setCitizenSession] = useState<CitizenSession | null>(() => {
     try {
       return JSON.parse(localStorage.getItem(CITIZEN_SESSION_KEY) || 'null') as CitizenSession | null;
@@ -70,17 +76,16 @@ export default function App() {
     }
   });
 
-  const [formData, setFormData] = useState<AssessmentFormData>(DEMO_ASSESSMENT_DATA);
+  const [formData, setFormData] = useState<AssessmentFormData>(() => buildDemoAssessment(DEFAULT_DEMO_CITY, 'en'));
   const [feasibilityScore, setFeasibilityScore] = useState<FeasibilityScoreData>(DEMO_FEASIBILITY_SCORE);
   const [swot, setSwot] = useState<SWOTData>(DEMO_SWOT);
   const [insights, setInsights] = useState(DEMO_AI_INSIGHTS);
-  const [opportunityData, setOpportunityData] = useState<LocalOpportunityData>(DEMO_LOCAL_OPPORTUNITY);
+  const [opportunityData, setOpportunityData] = useState<LocalOpportunityData>(() => buildDemoOpportunity(DEFAULT_DEMO_CITY));
   const [recommendation, setRecommendation] = useState<string>(
-    'Your proposed dairy business in Rampur shows strong fundamentals. Daily recurring household demand and tea stall contracts provide resilient cash velocity, provided you maintain disciplined cold storage and upfront milk fat testing.'
+    'This demo business shows promising recurring local demand. Validate supplier reliability, customer contracts and cold-chain costs before investing.'
   );
   const [isAiGenerated, setIsAiGenerated] = useState<boolean>(false);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
-
   const [isVoiceOpen, setIsVoiceOpen] = useState<boolean>(false);
   const [isHelpOpen, setIsHelpOpen] = useState<boolean>(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
@@ -95,16 +100,12 @@ export default function App() {
 
   useEffect(() => {
     let active = true;
-
     const syncCitizen = async () => {
       const session = await getCurrentCitizenSession();
       if (!active) return;
       setCitizenSession(session);
-      if (session) {
-        localStorage.setItem(CITIZEN_SESSION_KEY, JSON.stringify(session));
-      } else {
-        localStorage.removeItem(CITIZEN_SESSION_KEY);
-      }
+      if (session) localStorage.setItem(CITIZEN_SESSION_KEY, JSON.stringify(session));
+      else localStorage.removeItem(CITIZEN_SESSION_KEY);
     };
 
     void syncCitizen();
@@ -123,26 +124,33 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleTryDemo = () => {
-    setFormData(DEMO_ASSESSMENT_DATA);
+  const handleTryDemo = (cityId: DemoCityId = selectedDemoCity) => {
+    const city = getDemoCity(cityId);
+    setSelectedDemoCity(cityId);
+    setFormData(buildDemoAssessment(cityId, language));
     setFeasibilityScore(DEMO_FEASIBILITY_SCORE);
     setSwot(DEMO_SWOT);
     setInsights(DEMO_AI_INSIGHTS);
-    setOpportunityData(DEMO_LOCAL_OPPORTUNITY);
+    setOpportunityData(buildDemoOpportunity(cityId));
     setRecommendation(
-      'Your proposed dairy business in Rampur shows strong fundamentals. Daily recurring household demand and tea stall contracts provide resilient cash velocity, provided you maintain disciplined cold storage and upfront milk fat testing.'
+      `The ${city.district} demo shows promising recurring local demand for organized dairy supply. Validate customer contracts, supplier reliability and operating costs through a field survey before investing.`
     );
     setIsAiGenerated(false);
     navigateTo('dashboard');
   };
 
+  const handleDemoCityChange = (cityId: DemoCityId) => {
+    setSelectedDemoCity(cityId);
+    handleTryDemo(cityId);
+  };
+
   const handleAssessmentSubmit = async (newForm: AssessmentFormData) => {
-    setFormData(newForm);
+    setFormData({ ...newForm, preferredLanguage: language });
     setIsAnalyzing(true);
     navigateTo('opportunity');
 
     try {
-      const result = await analyzeBusinessWithAI(newForm);
+      const result = await analyzeBusinessWithAI({ ...newForm, preferredLanguage: language });
       setFeasibilityScore(result.feasibilityScore);
       setSwot(result.swot);
       setInsights(result.insights);
@@ -155,7 +163,7 @@ export default function App() {
       );
       void saveAssessmentBundle(newForm, result, calculatedFinance);
     } catch {
-      // Fallback is handled inside aiService.
+      // aiService contains its own fallback behavior.
     } finally {
       setIsAnalyzing(false);
     }
@@ -201,6 +209,8 @@ export default function App() {
             onOpenVoice={() => setIsVoiceOpen(true)}
             onOpenHelp={() => setIsHelpOpen(true)}
             onTryDemo={handleTryDemo}
+            selectedDemoCity={selectedDemoCity}
+            onDemoCityChange={handleDemoCityChange}
             onToggleMobileMenu={() => setIsMobileMenuOpen(true)}
           />
         )}
@@ -218,17 +228,13 @@ export default function App() {
               onNavigate={navigateTo}
               language={language}
               onLanguageChange={setLanguage}
-              onTryDemo={handleTryDemo}
+              onTryDemo={() => handleTryDemo(selectedDemoCity)}
               onOpenHelp={() => setIsHelpOpen(true)}
             />
           )}
 
           {currentPage === 'citizen-login' && (
-            <CitizenLoginPage
-              language={language}
-              onBack={() => navigateTo('landing')}
-              onSuccess={handleCitizenLogin}
-            />
+            <CitizenLoginPage language={language} onBack={() => navigateTo('landing')} onSuccess={handleCitizenLogin} />
           )}
 
           {currentPage === 'admin' && (
@@ -250,6 +256,7 @@ export default function App() {
               growthData={growthData}
               onNavigate={navigateTo}
               onTryDemo={handleTryDemo}
+              selectedDemoCity={selectedDemoCity}
               onOpenVoice={() => setIsVoiceOpen(true)}
               onOpenHelp={() => setIsHelpOpen(true)}
               language={language}
@@ -257,21 +264,11 @@ export default function App() {
           )}
 
           {currentPage === 'assessment' && (
-            <AssessmentPage
-              initialData={formData}
-              onSubmit={handleAssessmentSubmit}
-              language={language}
-              onOpenVoice={() => setIsVoiceOpen(true)}
-            />
+            <AssessmentPage initialData={formData} onSubmit={handleAssessmentSubmit} language={language} onOpenVoice={() => setIsVoiceOpen(true)} />
           )}
 
           {currentPage === 'opportunity' && (
-            <OpportunityPage
-              formData={formData}
-              opportunityData={opportunityData}
-              onNavigate={navigateTo}
-              language={language}
-            />
+            <OpportunityPage formData={formData} opportunityData={opportunityData} onNavigate={navigateTo} language={language} />
           )}
 
           {currentPage === 'analysis' && (
@@ -288,29 +285,15 @@ export default function App() {
           )}
 
           {currentPage === 'finance' && (
-            <FinancePage
-              formData={formData}
-              financialData={financialData}
-              onNavigate={navigateTo}
-              language={language}
-            />
+            <FinancePage formData={formData} financialData={financialData} onNavigate={navigateTo} language={language} />
           )}
 
           {currentPage === 'schemes' && (
-            <SchemesPage
-              financialData={financialData}
-              onNavigate={navigateTo}
-              language={language}
-            />
+            <SchemesPage financialData={financialData} onNavigate={navigateTo} language={language} />
           )}
 
           {currentPage === 'growth' && (
-            <GrowthPage
-              formData={formData}
-              growthData={growthData}
-              onNavigate={navigateTo}
-              language={language}
-            />
+            <GrowthPage formData={formData} growthData={growthData} onNavigate={navigateTo} language={language} />
           )}
 
           {currentPage === 'report' && (
@@ -375,10 +358,7 @@ export default function App() {
         }}
       />
 
-      <SourcesModal
-        isOpen={isHelpOpen}
-        onClose={() => setIsHelpOpen(false)}
-      />
+      <SourcesModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
     </div>
   );
 }
