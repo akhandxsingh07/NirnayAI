@@ -2,7 +2,6 @@ import React, { useMemo, useState } from 'react';
 import { AssessmentFormData, BusinessCategory, LanguageCode } from '../types';
 import {
   ArrowRight,
-  BriefcaseBusiness,
   CheckCircle2,
   IndianRupee,
   LandPlot,
@@ -22,6 +21,7 @@ interface AssessmentPageProps {
 
 type Risk = 'Low' | 'Medium' | 'High';
 type Experience = 'None' | 'Some' | 'Experienced';
+type SchemeScope = 'Central' | 'Uttar Pradesh';
 
 type BusinessProfile = {
   name: string;
@@ -38,10 +38,28 @@ type BusinessProfile = {
 type SchemeProfile = {
   id: string;
   name: string;
+  scope: SchemeScope;
   bestFor: string;
   benefit: string;
+  eligibilityHint: string;
   officialUrl: string;
+  tags: string[];
 };
+
+const UP_LOCATIONS = [
+  'Lucknow',
+  'Barabanki',
+  'Sitapur',
+  'Unnao',
+  'Rae Bareli',
+  'Hardoi',
+  'Kanpur Nagar',
+  'Ayodhya',
+  'Sultanpur',
+  'Lakhimpur Kheri',
+  'Bahraich',
+  'Prayagraj',
+];
 
 const BUSINESS_OPTIONS: BusinessProfile[] = [
   {
@@ -53,7 +71,7 @@ const BUSINESS_OPTIONS: BusinessProfile[] = [
     expertise: ['agriculture', 'farming', 'horticulture', 'food'],
     risk: 'Medium',
     reason: 'Low land requirement, short crop cycles and strong fit for agriculture-oriented users.',
-    schemeIds: ['PMEGP', 'MUDRA'],
+    schemeIds: ['CMYUVA', 'PMEGP', 'MUDRA', 'CGTMSE'],
   },
   {
     name: 'Dairy & Milk Collection Centre',
@@ -61,10 +79,10 @@ const BUSINESS_OPTIONS: BusinessProfile[] = [
     minCapital: 250000,
     maxCapital: 1500000,
     minLand: 0.15,
-    expertise: ['dairy', 'animal', 'farming', 'agriculture'],
+    expertise: ['dairy', 'animal', 'farming', 'agriculture', 'milk'],
     risk: 'Medium',
     reason: 'Recurring local demand and good fit where the user has space plus animal-handling experience.',
-    schemeIds: ['PMEGP', 'MUDRA'],
+    schemeIds: ['CMYUVA', 'MYSY', 'PMEGP', 'MUDRA', 'CGTMSE'],
   },
   {
     name: 'Poultry Farming',
@@ -75,7 +93,7 @@ const BUSINESS_OPTIONS: BusinessProfile[] = [
     expertise: ['poultry', 'animal', 'farming', 'agriculture'],
     risk: 'Medium',
     reason: 'Scalable rural business with manageable entry capital and regular market demand.',
-    schemeIds: ['PMEGP', 'MUDRA'],
+    schemeIds: ['CMYUVA', 'PMEGP', 'MUDRA', 'CGTMSE'],
   },
   {
     name: 'Micro Food Processing Unit',
@@ -85,8 +103,8 @@ const BUSINESS_OPTIONS: BusinessProfile[] = [
     minLand: 0.04,
     expertise: ['food', 'cooking', 'processing', 'agriculture', 'business'],
     risk: 'Medium',
-    reason: 'Can convert local produce into higher-value packaged products and has dedicated scheme support.',
-    schemeIds: ['PMFME', 'PMEGP', 'MUDRA'],
+    reason: 'Can convert local produce into higher-value packaged products and has dedicated food-processing support.',
+    schemeIds: ['PMFME', 'ODOP', 'CMYUVA', 'PMEGP', 'MUDRA', 'CGTMSE'],
   },
   {
     name: 'Plant Nursery & Seedling Business',
@@ -94,10 +112,10 @@ const BUSINESS_OPTIONS: BusinessProfile[] = [
     minCapital: 80000,
     maxCapital: 600000,
     minLand: 0.08,
-    expertise: ['agriculture', 'farming', 'horticulture', 'plants'],
+    expertise: ['agriculture', 'farming', 'horticulture', 'plants', 'nursery'],
     risk: 'Low',
     reason: 'Good for users with small land parcels, agriculture skills and preference for lower operating risk.',
-    schemeIds: ['MUDRA', 'PMEGP'],
+    schemeIds: ['CMYUVA', 'MUDRA', 'PMEGP'],
   },
   {
     name: 'Tailoring & Garment Micro Unit',
@@ -108,7 +126,7 @@ const BUSINESS_OPTIONS: BusinessProfile[] = [
     expertise: ['tailoring', 'fashion', 'stitching', 'design'],
     risk: 'Low',
     reason: 'Very low land dependence and suitable for skill-led micro entrepreneurship.',
-    schemeIds: ['MUDRA', 'PMEGP'],
+    schemeIds: ['VSSY', 'PMVISHWAKARMA', 'CMYUVA', 'MUDRA', 'PMEGP'],
   },
   {
     name: 'Mobile & Electronics Repair Centre',
@@ -119,7 +137,7 @@ const BUSINESS_OPTIONS: BusinessProfile[] = [
     expertise: ['electronics', 'repair', 'mobile', 'technical', 'computer'],
     risk: 'Low',
     reason: 'Low fixed-cost service business where technical skill matters more than land.',
-    schemeIds: ['MUDRA', 'PMEGP'],
+    schemeIds: ['VSSY', 'CMYUVA', 'MUDRA', 'PMEGP'],
   },
   {
     name: 'Local Digital Services & Marketing Agency',
@@ -127,10 +145,10 @@ const BUSINESS_OPTIONS: BusinessProfile[] = [
     minCapital: 50000,
     maxCapital: 400000,
     minLand: 0,
-    expertise: ['computer', 'digital', 'marketing', 'design', 'coding', 'social media'],
+    expertise: ['computer', 'digital', 'marketing', 'design', 'coding', 'social media', 'software'],
     risk: 'Low',
     reason: 'Best suited to users with digital skills and limited land or capital.',
-    schemeIds: ['MUDRA', 'PMEGP'],
+    schemeIds: ['CMYUVA', 'MUDRA', 'PMEGP'],
   },
   {
     name: 'Handicraft & Artisan Product Unit',
@@ -141,7 +159,7 @@ const BUSINESS_OPTIONS: BusinessProfile[] = [
     expertise: ['craft', 'handicraft', 'art', 'design', 'artisan'],
     risk: 'Low',
     reason: 'Skill-driven enterprise that can start small and expand into online or tourism-linked sales.',
-    schemeIds: ['MUDRA', 'PMEGP'],
+    schemeIds: ['PMVISHWAKARMA', 'VSSY', 'ODOP', 'CMYUVA', 'MUDRA', 'PMEGP'],
   },
   {
     name: 'Mini Flour / Spice Processing Unit',
@@ -152,31 +170,122 @@ const BUSINESS_OPTIONS: BusinessProfile[] = [
     expertise: ['manufacturing', 'food', 'agriculture', 'business', 'processing'],
     risk: 'Medium',
     reason: 'Strong local-demand manufacturing option for users with moderate capital and basic operating space.',
-    schemeIds: ['PMFME', 'PMEGP', 'MUDRA'],
+    schemeIds: ['PMFME', 'ODOP', 'CMYUVA', 'MYSY', 'PMEGP', 'CGTMSE'],
+  },
+  {
+    name: 'Small Furniture / Carpentry Workshop',
+    category: 'Small Manufacturing',
+    minCapital: 120000,
+    maxCapital: 1000000,
+    minLand: 0.02,
+    expertise: ['carpentry', 'wood', 'furniture', 'artisan', 'manufacturing'],
+    risk: 'Medium',
+    reason: 'Good skill-led manufacturing option with artisan-focused support pathways.',
+    schemeIds: ['PMVISHWAKARMA', 'VSSY', 'CMYUVA', 'MUDRA', 'PMEGP'],
+  },
+  {
+    name: 'Solar Installation & Repair Service',
+    category: 'Repair Services',
+    minCapital: 100000,
+    maxCapital: 700000,
+    minLand: 0,
+    expertise: ['solar', 'electrical', 'electrician', 'technical', 'repair'],
+    risk: 'Medium',
+    reason: 'Growing technical-service opportunity with low land dependence and skill-based entry.',
+    schemeIds: ['VSSY', 'CMYUVA', 'MUDRA', 'PMEGP'],
   },
 ];
 
 const SCHEMES: SchemeProfile[] = [
   {
+    id: 'CMYUVA',
+    name: 'Mukhyamantri Yuva Udyami Vikas Abhiyan (CM-YUVA)',
+    scope: 'Uttar Pradesh',
+    bestFor: 'Young UP residents starting manufacturing, service or trade micro-enterprises',
+    benefit: 'UP MSME describes interest support for eligible youth enterprises, including Phase-1 support on loans up to ₹5 lakh.',
+    eligibilityHint: 'Best match when the applicant is a UP resident, generally 21–40 years old, and meets education/training conditions.',
+    officialUrl: 'https://msme1connect.up.gov.in/scheme-list/-mukhyamantri-yuva-udyami-vikas-abhiyan-yojana-%28cm-yuva%29',
+    tags: ['up', 'youth', 'new-business', 'service', 'manufacturing', 'trade'],
+  },
+  {
+    id: 'MYSY',
+    name: 'Mukhyamantri Yuva Swarojgar Yojana',
+    scope: 'Uttar Pradesh',
+    bestFor: 'Educated UP youth establishing industry or service enterprises',
+    benefit: 'UP MSME lists bank-linked finance with margin-money support for eligible industry and service projects.',
+    eligibilityHint: 'Useful for UP residents in the prescribed youth age group who meet education and bank eligibility conditions.',
+    officialUrl: 'https://msme1connect.up.gov.in/scheme-list/mukhyamantri-yuva-swarojgar-yojana',
+    tags: ['up', 'youth', 'manufacturing', 'service', 'margin-money'],
+  },
+  {
+    id: 'ODOP',
+    name: 'UP ODOP Margin Money Scheme',
+    scope: 'Uttar Pradesh',
+    bestFor: 'Units producing the official One District One Product item of their district',
+    benefit: 'Provides project-cost-linked margin-money assistance for eligible ODOP units through the UP industrial ecosystem.',
+    eligibilityHint: 'Only recommend strongly when the proposed product matches the selected district’s notified ODOP product.',
+    officialUrl: 'https://msme1connect.up.gov.in/scheme-list/financial-assistance-scheme-for-one-district-one-product-%28odop-margin-money-scheme%29',
+    tags: ['up', 'odop', 'artisan', 'food', 'manufacturing', 'district-product'],
+  },
+  {
+    id: 'VSSY',
+    name: 'Vishwakarma Shram Samman Yojana 2.0',
+    scope: 'Uttar Pradesh',
+    bestFor: 'Traditional artisans and selected modern technical trades in Uttar Pradesh',
+    benefit: 'UP MSME describes free skill training, tool/financial support and market-linkage assistance across covered trades.',
+    eligibilityHint: 'Strong fit for trades such as tailoring, carpentry, mobile/electronics repair, plumbing, solar installation and related skills.',
+    officialUrl: 'https://msme1connect.up.gov.in/scheme-list/vishwakarma-shram-samman-yojana',
+    tags: ['up', 'artisan', 'tailoring', 'repair', 'carpentry', 'solar', 'technical'],
+  },
+  {
     id: 'PMEGP',
-    name: 'PMEGP',
+    name: 'Prime Minister Employment Generation Programme (PMEGP)',
+    scope: 'Central',
     bestFor: 'New micro-enterprises in manufacturing and service sectors',
-    benefit: 'Credit-linked support for eligible new projects; final eligibility and subsidy depend on official rules and applicant profile.',
-    officialUrl: 'https://www.kviconline.gov.in/pmegpeportal/',
+    benefit: 'Credit-linked subsidy support for eligible new units; official rules vary by category, rural/urban location and project size.',
+    eligibilityHint: 'A broad option for first-time/new micro-enterprise projects; final eligibility must be checked on the PMEGP portal.',
+    officialUrl: 'https://pmegp.msme.gov.in/',
+    tags: ['india', 'new-business', 'manufacturing', 'service', 'subsidy'],
   },
   {
     id: 'MUDRA',
-    name: 'Pradhan Mantri MUDRA Yojana',
-    bestFor: 'Small non-corporate micro businesses needing business credit',
-    benefit: 'Useful for small-ticket enterprise finance through participating lenders; loan approval remains lender-dependent.',
-    officialUrl: 'https://www.mudra.org.in/',
+    name: 'Pradhan Mantri MUDRA Yojana (PMMY)',
+    scope: 'Central',
+    bestFor: 'Micro businesses needing business credit through participating lenders',
+    benefit: 'Business-loan support under MUDRA categories for eligible micro enterprises; sanction depends on lender appraisal.',
+    eligibilityHint: 'Useful when the user needs relatively small business finance and does not specifically require a subsidy-linked scheme.',
+    officialUrl: 'https://www.financialservices.gov.in/pradhan-mantri-mudra-yojana',
+    tags: ['india', 'micro-business', 'loan', 'service', 'trade', 'manufacturing'],
   },
   {
     id: 'PMFME',
     name: 'PM Formalisation of Micro Food Processing Enterprises (PMFME)',
-    bestFor: 'Eligible micro food-processing units',
-    benefit: 'Official PMFME materials describe credit-linked capital subsidy support for eligible micro food-processing projects.',
+    scope: 'Central',
+    bestFor: 'Eligible new or existing micro food-processing enterprises',
+    benefit: 'Official PMFME portal describes 35% credit-linked capital subsidy on eligible project cost, subject to scheme ceilings and conditions.',
+    eligibilityHint: 'Strongest fit for food-processing, spice, flour, packaged-food and district-product processing ideas.',
     officialUrl: 'https://pmfme.mofpi.gov.in/',
+    tags: ['india', 'food', 'processing', 'odop', 'subsidy'],
+  },
+  {
+    id: 'PMVISHWAKARMA',
+    name: 'PM Vishwakarma',
+    scope: 'Central',
+    bestFor: 'Eligible traditional artisans and craftspeople in notified trades',
+    benefit: 'Includes recognition, skill training, toolkit incentive and concessional collateral-free enterprise credit for eligible Vishwakarmas.',
+    eligibilityHint: 'Strong fit for traditional craft and artisan occupations; only notified trades are eligible.',
+    officialUrl: 'https://pmvishwakarma.gov.in/',
+    tags: ['india', 'artisan', 'craft', 'tailoring', 'carpentry', 'tools', 'skill'],
+  },
+  {
+    id: 'CGTMSE',
+    name: 'CGTMSE Credit Guarantee Scheme',
+    scope: 'Central',
+    bestFor: 'Eligible micro and small enterprises seeking collateral-light bank credit',
+    benefit: 'Provides guarantee cover to eligible lender credit facilities, helping improve access to collateral-free or collateral-light finance.',
+    eligibilityHint: 'Not a direct cash subsidy; it works through eligible lenders and is useful when bank credit access is the main barrier.',
+    officialUrl: 'https://www.cgtmse.in/',
+    tags: ['india', 'credit-guarantee', 'msme', 'loan', 'manufacturing', 'service'],
   },
 ];
 
@@ -193,13 +302,14 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ initialData, onS
   const [capital, setCapital] = useState<number>(initialData.availableMargin || initialData.marginCapital || 300000);
   const [expertise, setExpertise] = useState<string>('agriculture');
   const [stateName, setStateName] = useState<string>(initialData.location.state || 'Uttar Pradesh');
-  const [district, setDistrict] = useState<string>(initialData.location.district || 'Lucknow');
+  const [district, setDistrict] = useState<string>(UP_LOCATIONS.includes(initialData.location.district) ? initialData.location.district : 'Lucknow');
   const [risk, setRisk] = useState<Risk>(initialData.riskWillingness || 'Medium');
   const [experience, setExperience] = useState<Experience>(initialData.priorExperience || 'Some');
   const [showResults, setShowResults] = useState(false);
 
   const recommendations = useMemo(() => {
     const skill = normalize(expertise);
+    const isUP = normalize(stateName).includes('uttar pradesh') || normalize(stateName) === 'up';
 
     return BUSINESS_OPTIONS.map((business) => {
       const cFit = capitalFit(capital, business.minCapital, business.maxCapital);
@@ -207,12 +317,23 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ initialData, onS
       const skillFit = business.expertise.some((item) => skill.includes(item) || item.includes(skill)) ? 25 : skill.length > 2 ? 8 : 4;
       const riskFit = business.risk === risk ? 10 : risk === 'High' ? 8 : business.risk === 'Low' ? 7 : 5;
       const score = Math.min(98, Math.round(cFit + landFit + skillFit + riskFit));
-      const scheme = SCHEMES.find((item) => item.id === business.schemeIds[0]) || SCHEMES[0];
-      return { ...business, score, scheme };
+
+      const schemes = business.schemeIds
+        .map((id) => SCHEMES.find((item) => item.id === id))
+        .filter((item): item is SchemeProfile => Boolean(item))
+        .filter((scheme) => scheme.scope === 'Central' || isUP)
+        .map((scheme, index) => ({
+          ...scheme,
+          matchScore: Math.max(62, Math.min(97, score - index * 4 + (scheme.scope === 'Uttar Pradesh' && isUP ? 5 : 0))),
+        }))
+        .sort((a, b) => b.matchScore - a.matchScore)
+        .slice(0, 3);
+
+      return { ...business, score, schemes };
     })
       .sort((a, b) => b.score - a.score)
       .slice(0, 3);
-  }, [capital, expertise, landArea, risk]);
+  }, [capital, expertise, landArea, risk, stateName]);
 
   const applyRecommendation = (business: (typeof recommendations)[number]) => {
     const next: AssessmentFormData = {
@@ -245,11 +366,11 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ initialData, onS
             </div>
             <h1 className="text-2xl font-black text-[#2B1B16] sm:text-3xl">Tell us what you have. We’ll tell you what fits.</h1>
             <p className="mt-2 max-w-3xl text-sm text-[#7A5A49]">
-              Enter your available land, capital and expertise. NirnayAI ranks suitable business options and also suggests the most relevant government support scheme to verify.
+              Enter land, capital, expertise and location. NirnayAI ranks business ideas and now compares multiple Central + Uttar Pradesh government support schemes for each match.
             </p>
           </div>
           <div className="rounded-2xl border border-[#D9B99B]/50 bg-[#FAF7F3] px-4 py-3 text-xs font-bold text-[#6B4535]">
-            Business + Scheme Matching
+            Business + Deep Scheme Matching
           </div>
         </div>
       </section>
@@ -278,12 +399,21 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ initialData, onS
 
           <label className="space-y-2 text-xs font-bold text-[#2B1B16]">
             <span className="flex items-center gap-2"><MapPin className="h-4 w-4 text-[#8B5E47]" />State</span>
-            <input value={stateName} onChange={(e) => setStateName(e.target.value)} className="w-full rounded-xl border border-[#D9B99B]/60 bg-[#FAF7F3] px-4 py-3 outline-none focus:ring-2 focus:ring-[#D9B99B]" />
+            <select value={stateName} onChange={(e) => setStateName(e.target.value)} className="w-full rounded-xl border border-[#D9B99B]/60 bg-[#FAF7F3] px-4 py-3 outline-none">
+              <option value="Uttar Pradesh">Uttar Pradesh</option>
+              <option value="Other State">Other State</option>
+            </select>
           </label>
 
           <label className="space-y-2 text-xs font-bold text-[#2B1B16]">
-            <span>District</span>
-            <input value={district} onChange={(e) => setDistrict(e.target.value)} className="w-full rounded-xl border border-[#D9B99B]/60 bg-[#FAF7F3] px-4 py-3 outline-none focus:ring-2 focus:ring-[#D9B99B]" />
+            <span>Location / District</span>
+            {stateName === 'Uttar Pradesh' ? (
+              <select value={district} onChange={(e) => setDistrict(e.target.value)} className="w-full rounded-xl border border-[#D9B99B]/60 bg-[#FAF7F3] px-4 py-3 outline-none">
+                {UP_LOCATIONS.map((place) => <option key={place} value={place}>{place}</option>)}
+              </select>
+            ) : (
+              <input value={district} onChange={(e) => setDistrict(e.target.value)} placeholder="Enter your district/city" className="w-full rounded-xl border border-[#D9B99B]/60 bg-[#FAF7F3] px-4 py-3 outline-none focus:ring-2 focus:ring-[#D9B99B]" />
+            )}
           </label>
 
           <label className="space-y-2 text-xs font-bold text-[#2B1B16]">
@@ -309,8 +439,8 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ initialData, onS
       {showResults && (
         <section className="space-y-4">
           <div>
-            <h2 className="text-xl font-black text-[#2B1B16]">Top matches for you</h2>
-            <p className="text-xs text-[#7A5A49]">Scores are indicative decision-support scores, not guaranteed financial returns.</p>
+            <h2 className="text-xl font-black text-[#2B1B16]">Top matches for {district}</h2>
+            <p className="text-xs text-[#7A5A49]">Business scores and scheme-match scores are decision-support estimates, not guaranteed approval or returns.</p>
           </div>
 
           {recommendations.map((business, index) => (
@@ -319,7 +449,7 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ initialData, onS
                 <div className="flex-1 space-y-4">
                   <div className="flex flex-wrap items-center gap-3">
                     <span className="rounded-full bg-[#6F7655]/15 px-3 py-1 text-xs font-black text-[#56603F]">#{index + 1} Match</span>
-                    <span className="rounded-full bg-[#FAF0E5] px-3 py-1 text-xs font-black text-[#8B5E47]">{business.score}% fit</span>
+                    <span className="rounded-full bg-[#FAF0E5] px-3 py-1 text-xs font-black text-[#8B5E47]">{business.score}% business fit</span>
                   </div>
                   <div>
                     <h3 className="text-xl font-black text-[#2B1B16]">{business.name}</h3>
@@ -332,11 +462,24 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ initialData, onS
                   </div>
 
                   <div className="rounded-2xl border border-[#B8C09B]/60 bg-[#F5F7EE] p-4">
-                    <div className="mb-2 flex items-center gap-2 text-sm font-black text-[#46502F]"><ShieldCheck className="h-4 w-4" /> Best government scheme to verify</div>
-                    <div className="font-extrabold text-[#2B1B16]">{business.scheme.name}</div>
-                    <p className="mt-1 text-xs text-[#687050]">{business.scheme.bestFor}</p>
-                    <p className="mt-2 text-xs text-[#687050]">{business.scheme.benefit}</p>
-                    <a href={business.scheme.officialUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex text-xs font-extrabold text-[#6B4535] underline decoration-[#D9B99B] underline-offset-4">Verify on official portal</a>
+                    <div className="mb-3 flex items-center gap-2 text-sm font-black text-[#46502F]"><ShieldCheck className="h-4 w-4" /> Best government schemes to verify</div>
+                    <div className="space-y-3">
+                      {business.schemes.map((scheme, schemeIndex) => (
+                        <div key={scheme.id} className="rounded-xl border border-[#CED5B7] bg-white/80 p-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="font-extrabold text-[#2B1B16]">{schemeIndex + 1}. {scheme.name}</div>
+                            <div className="flex items-center gap-2">
+                              <span className="rounded-full bg-[#EEE8DE] px-2 py-1 text-[10px] font-black text-[#6B4535]">{scheme.scope}</span>
+                              <span className="rounded-full bg-[#DFE7CC] px-2 py-1 text-[10px] font-black text-[#46502F]">{scheme.matchScore}% scheme fit</span>
+                            </div>
+                          </div>
+                          <p className="mt-1 text-xs text-[#687050]"><strong>Best for:</strong> {scheme.bestFor}</p>
+                          <p className="mt-1 text-xs text-[#687050]"><strong>Benefit:</strong> {scheme.benefit}</p>
+                          <p className="mt-1 text-xs text-[#687050]"><strong>Eligibility hint:</strong> {scheme.eligibilityHint}</p>
+                          <a href={scheme.officialUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex text-xs font-extrabold text-[#6B4535] underline decoration-[#D9B99B] underline-offset-4">Verify on official portal</a>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
@@ -348,7 +491,7 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ initialData, onS
           ))}
 
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
-            <strong>Important:</strong> NirnayAI shows likely-fit schemes for decision support. Final eligibility, subsidy, loan sanction and required documents must always be verified on the official government portal or with the implementing bank/agency.
+            <strong>Important:</strong> NirnayAI shows likely-fit schemes for decision support. Final eligibility, current availability, subsidy, loan sanction, district-product eligibility and required documents must always be verified on the official government portal or with the implementing bank/agency.
           </div>
         </section>
       )}
