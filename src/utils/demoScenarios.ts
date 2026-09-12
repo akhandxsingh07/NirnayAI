@@ -1,4 +1,4 @@
-import { AssessmentFormData } from '../types';
+import { AssessmentFormData, LocalOpportunityData, MapMarkerItem } from '../types';
 
 export type DemoCityId =
   | 'lucknow'
@@ -53,7 +53,10 @@ export function getDemoCity(id: DemoCityId): DemoCity {
   return DEMO_CITIES.find((city) => city.id === id) || DEMO_CITIES[0];
 }
 
-export function buildDemoAssessment(cityId: DemoCityId, preferredLanguage: AssessmentFormData['preferredLanguage'] = 'en'): AssessmentFormData {
+export function buildDemoAssessment(
+  cityId: DemoCityId,
+  preferredLanguage: AssessmentFormData['preferredLanguage'] = 'en'
+): AssessmentFormData {
   const city = getDemoCity(cityId);
   return {
     location: {
@@ -73,5 +76,33 @@ export function buildDemoAssessment(cityId: DemoCityId, preferredLanguage: Asses
     priorExperience: 'Some',
     riskWillingness: 'Medium',
     preferredLanguage,
+  };
+}
+
+export function buildDemoOpportunity(cityId: DemoCityId): LocalOpportunityData {
+  const city = getDemoCity(cityId);
+  const markers: MapMarkerItem[] = [
+    { id: 'opp-1', type: 'opportunity', title: `${city.district} Local Market Cluster`, distanceKm: 3.5, x: 68, y: 35, description: 'Recurring demand from households and local food businesses creates a dependable daily market.', impact: 'High' },
+    { id: 'opp-2', type: 'opportunity', title: 'Tea Stalls & Small Restaurant Cluster', distanceKm: 2.2, x: 43, y: 58, description: 'Commercial buyers can support repeat morning supply contracts for fresh milk and curd.', impact: 'High' },
+    { id: 'comp-1', type: 'competitor', title: 'Traditional Local Milk Suppliers', distanceKm: 1.6, x: 30, y: 28, description: 'Informal competition exists, but consistency, testing and packaging can differentiate the business.', impact: 'Medium' },
+    { id: 'gap-1', type: 'gap', title: 'Organized Chilling & Packaging Gap', distanceKm: 4.4, x: 55, y: 78, description: 'Small-scale organized cold-chain and value-added dairy supply remains a local opportunity.', impact: 'High' },
+    { id: 'cust-1', type: 'customer', title: `${city.village} Household Cluster`, distanceKm: 1.8, x: 25, y: 65, description: 'Daily household demand can support subscription-based milk delivery.', impact: 'High' },
+  ];
+
+  return {
+    locationSummary: `${city.village}, ${city.block}, ${city.district} (${city.state})`,
+    radiusKm: 10,
+    localDemand: 'Moderate to High',
+    demandSignal: `Recurring household and commercial dairy demand is modeled around ${city.district}.`,
+    marketGap: 'Opportunity for tested, chilled and packaged dairy products with predictable local delivery.',
+    competition: 'Moderate — mostly fragmented and informal local suppliers',
+    competitorDensity: 'Indicative local supplier density; verify through field survey before investment',
+    recommendedRadius: '5 km delivery radius, expandable to 10 km sourcing radius',
+    suggestedProductMix: ['Fresh Milk', 'Set Curd / Dahi', 'Fresh Paneer', 'Ghee'],
+    customerSegments: [city.targetMarket, 'Local tea stalls and eateries', 'Sweet shops and institutional buyers'],
+    dataConfidence: 'Medium',
+    sources: ['NirnayAI demo market model', 'Indicative local market assumptions', 'Field verification recommended before investment'],
+    markers,
+    evidenceBadge: 'INDICATIVE',
   };
 }
