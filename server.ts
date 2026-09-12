@@ -2,16 +2,28 @@ import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
+import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT || 3000);
 
-app.use(express.json());
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://nllkmunqdkznhnhfrric.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY =
+  process.env.SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_sEfaduAFppFtdtm5tEAerA_bcpMpbKF';
 
-// Lazy Gemini Client
+const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
+  },
+});
+
+app.use(express.json({ limit: '1mb' }));
+
 let geminiClient: GoogleGenAI | null = null;
 function getGemini(): GoogleGenAI | null {
   if (!geminiClient && process.env.GEMINI_API_KEY) {
@@ -20,57 +32,104 @@ function getGemini(): GoogleGenAI | null {
   return geminiClient;
 }
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
+function getBearerToken(req: express.Request): string | null {
+  const header = req.headers.authorization;
+  if (!header?.startsWith('Bearer ')) return null;
+  return header.slice('Bearer '.length).trim() || null;
+}
+
+async function getAuthenticatedUser(req: express.Request) {
+  const token = getBearerToken(req);
+  if (!token) return null;
+
+  const { data, error } = await supabaseAuth.auth.getUser(token);
+  if (error || !data.user) return null;
+  return { user: data.user, token };
+}
+
+function createUserScopedClient(token: string) {
+  return createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
+}
+
+app.get('/api/health', (_req, res) => {
   res.json({
     status: 'ok',
-    hasApiKey: Boolean(process.env.GEMINI_API_KEY),
     service: 'NIRNAY AI Server',
+    backend: 'Express + Supabase PostgreSQL',
+    hasGeminiApiKey: Boolean(process.env.GEMINI_API_KEY),
+    hasSupabase: Boolean(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY),
   });
 });
 
-// AI Business Analysis Endpoint
+app.get('/api/auth/me', async (req, res) => {
+  const auth = await getAuthenticatedUser(req);
+  if (!auth) return res.status(401).json({ authenticated: false });
+
+  const scoped = createUserScopedClient(auth.token);
+  const { data: profile, error } = await scoped
+    .from('profiles')
+    .select('id, display_name, email, phone, role, preferred_language')
+    .eq('id', auth.user.id)
+    .single();
+
+  if (error || !profile) {
+    return res.status(403).json({ authenticated: true, profile: null });
+  }
+
+  return res.json({ authenticated: true, profile });
+});
+
 app.post('/api/ai/analyze', async (req, res) => {
-  const formData = req.body;
+  const auth = await getAuthenticatedUser(req);
   const ai = getGemini();
 
-  if (!ai || !process.env.GEMINI_API_KEY) {
-    // Return flag indicating demo fallback
-    return res.json({ demoMode: true, isAiGenerated: false });
+  if (!auth) {
+    return res.json({ demoMode: true, isAiGenerated: false, requiresAuth: true });
   }
+
+  if (!ai || !process.env.GEMINI_API_KEY) {
+    return res.json({ demoMode: true, isAiGenerated: false, requiresGeminiKey: true });
+  }
+
+  const formData = req.body;
 
   try {
     const prompt = `You are NIRNAY AI, an expert rural business advisory and financial structuring engine for India (Smart India Hackathon 2026 Problem Statement SIH26091).
 Analyze the following proposed rural/semi-urban micro-enterprise:
 Location: ${formData.location?.village}, ${formData.location?.block}, ${formData.location?.district} (${formData.location?.state})
 Category: ${formData.category}
-Idea: ${formData.businessIdea}
-Margin Capital Available: ₹${formData.availableMargin}
+Idea: ${formData.businessIdea || formData.ideaText}
+Margin Capital Available: ₹${formData.availableMargin || formData.marginCapital}
 Target Customers: ${formData.targetMarket}
 Prior Experience: ${formData.priorExperience}
 Risk Tolerance: ${formData.riskWillingness}
 
-Return a valid JSON object strictly matching this schema (NO MARKDOWN WRAPPERS):
+Return valid JSON only with this schema:
 {
   "feasibilityScore": {
-    "overallScore": number (0-100),
-    "statusLabel": "Promising — proceed with controlled investment" or similar,
-    "marketPotential": number (0-100),
-    "capitalFit": number (0-100),
-    "competitionScore": number (0-100),
-    "operationalFeasibility": number (0-100),
-    "growthPotential": number (0-100)
+    "overallScore": number,
+    "statusLabel": "string",
+    "marketPotential": number,
+    "capitalFit": number,
+    "competitionScore": number,
+    "operationalFeasibility": number,
+    "growthPotential": number
   },
-  "recommendation": "string (plain language strategic advice 2-3 sentences)",
+  "recommendation": "string",
   "swot": {
-    "strengths": ["string", "string"],
-    "weaknesses": ["string", "string"],
-    "opportunities": ["string", "string"],
-    "threats": ["string", "string"]
+    "strengths": ["string"],
+    "weaknesses": ["string"],
+    "opportunities": ["string"],
+    "threats": ["string"]
   },
   "insights": [
-    {"title": "string", "description": "string", "tag": "string"},
-    {"title": "string", "description": "string", "tag": "string"},
     {"title": "string", "description": "string", "tag": "string"}
   ],
   "localOpportunity": {
@@ -78,58 +137,48 @@ Return a valid JSON object strictly matching this schema (NO MARKDOWN WRAPPERS):
     "competitorDensity": "string",
     "marketGap": "string",
     "recommendedRadius": "string",
-    "suggestedProductMix": ["string", "string", "string", "string"]
+    "suggestedProductMix": ["string"]
   }
 }`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-      },
+      config: { responseMimeType: 'application/json' },
     });
 
-    const responseText = response.text || '{}';
-    const parsed = JSON.parse(responseText);
-
-    return res.json({
-      ...parsed,
-      isAiGenerated: true,
-    });
-  } catch (err: any) {
+    const parsed = JSON.parse(response.text || '{}');
+    return res.json({ ...parsed, isAiGenerated: true });
+  } catch (err) {
     console.error('Error generating AI analysis:', err);
     return res.json({ demoMode: true, isAiGenerated: false });
   }
 });
 
-// AI Conversational Assistant Endpoint
 app.post('/api/ai/chat', async (req, res) => {
-  const { question, context } = req.body;
+  const auth = await getAuthenticatedUser(req);
   const ai = getGemini();
 
+  if (!auth) return res.json({ demoMode: true, requiresAuth: true });
   if (!ai || !process.env.GEMINI_API_KEY) {
-    return res.json({ demoMode: true });
+    return res.json({ demoMode: true, requiresGeminiKey: true });
   }
+
+  const { question, context } = req.body;
 
   try {
     const prompt = `You are NIRNAY AI advisory assistant for rural micro-entrepreneurs in India.
-User Context:
 Business: ${context?.businessIdea || 'Rural enterprise'}
 Category: ${context?.category || 'General'}
-Committed Margin: ₹${context?.margin || 50000} (10%)
+Committed Margin: ₹${context?.margin || 50000}
 Total Project Cost: ₹${context?.projectCost || 500000}
-90% Loan Support: ₹${context?.loan || 450000}
+Loan Support: ₹${context?.loan || 450000}
 Scheme: ${context?.scheme || 'Term Loan Scheme'}
-Language: ${context?.language === 'hi' ? 'Hindi' : 'English'}
+Language: ${context?.language || 'en'}
 
 User Question: "${question}"
 
-Important Guidelines:
-1. Provide a concise, highly practical, supportive answer (under 120 words).
-2. If language is Hindi or user asked in Hindi, reply in clean, accessible Hindi.
-3. Keep loan/cost calculations consistent with SIH26091 rules (10% margin, 90% debt).
-4. Mention relevant sources (e.g. RBI Small Entrepreneur Guidelines, Udyam Registration).`;
+Reply in plain, practical language under 120 words. Keep financial figures internally consistent and avoid claiming guaranteed approvals or returns.`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
@@ -138,9 +187,9 @@ Important Guidelines:
 
     return res.json({
       answer: response.text,
-      sources: ['NIRNAY AI Advisory Engine', 'RBI Small Entrepreneur Guidelines'],
+      sources: ['NIRNAY AI Advisory Engine'],
     });
-  } catch (err: any) {
+  } catch (err) {
     console.error('Error in chat:', err);
     return res.json({ demoMode: true });
   }
@@ -156,7 +205,7 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
+    app.get('*', (_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
