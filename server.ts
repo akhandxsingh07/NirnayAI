@@ -4,6 +4,7 @@ import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
+import { registerLiveMapRoutes } from './server/liveMapRoutes';
 
 dotenv.config();
 
@@ -23,6 +24,7 @@ const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
 });
 
 app.use(express.json({ limit: '1mb' }));
+registerLiveMapRoutes(app);
 
 let geminiClient: GoogleGenAI | null = null;
 function getGemini(): GoogleGenAI | null {
