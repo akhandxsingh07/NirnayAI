@@ -34,6 +34,8 @@ export async function saveAssessmentBundle(
       business_idea: formData.businessIdea || formData.ideaText || formData.category,
       category: formData.category,
       available_margin: formData.availableMargin || formData.marginCapital || 0,
+      selected_expertise: formData.selectedExpertise || null,
+      available_land_acres: formData.availableLandAcres ?? null,
       target_market: formData.targetMarket || null,
       prior_experience: formData.priorExperience || null,
       risk_willingness: formData.riskWillingness || null,
