@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: nirnay-ai
+    runtime: node
+    buildCommand: npm install --include=dev --no-audit --no-fund && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        value: https://nllkmunqdkznhnhfrric.supabase.co
+      - key: SUPABASE_PUBLISHABLE_KEY
+        value: sb_publishable_sEfaduAFppFtdtm5tEAerA_bcpMpbKF
+      - key: VITE_SUPABASE_URL
+        value: https://nllkmunqdkznhnhfrric.supabase.co
+      - key: VITE_SUPABASE_PUBLISHABLE_KEY
+        value: sb_publishable_sEfaduAFppFtdtm5tEAerA_bcpMpbKF
