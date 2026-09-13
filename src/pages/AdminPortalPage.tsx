@@ -2,20 +2,18 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   BarChart3,
-  CheckCircle2,
   FileText,
   Landmark,
   Loader2,
   LockKeyhole,
   LogOut,
-  Mail,
   ShieldCheck,
   Sprout,
   UserRoundCog,
   Users,
 } from 'lucide-react';
 import type { LanguageCode, PageId } from '../types';
-import { getCurrentRole, sendAdminMagicLink, signOut } from '../services/authService';
+import { getCurrentRole, signInAdminWithIdPassword, signOut } from '../services/authService';
 import { getAdminStats, getRecentAdminActivity } from '../services/backendService';
 import { supabase } from '../lib/supabase';
 
@@ -32,9 +30,9 @@ type Copy = {
   restricted: string;
   title: string;
   body: string;
-  email: string;
+  loginId: string;
+  password: string;
   send: string;
-  sent: string;
   unauthorized: string;
   console: string;
   subtitle: string;
@@ -48,93 +46,88 @@ type Copy = {
   schemes: string;
   signout: string;
   back: string;
+  activity: string;
+  security: string;
 };
 
 const EN: Copy = {
-  restricted: 'Restricted Access', title: 'Nirnay AI Admin Portal', body: 'Only the single database-authorised administrator can open this console.',
-  email: 'Administrator email', send: 'Send secure admin sign-in link', sent: 'Secure sign-in link sent. Open the email, then return to the Admin portal.',
-  unauthorized: 'This signed-in account is not the authorised Nirnay AI administrator.', console: 'Administration Console', subtitle: 'Live citizen, assessment and report activity from the production database.',
-  citizens: 'Verified citizens', assessments: 'Saved assessments', reports: 'Generated reports', analyses: 'AI analyses', quick: 'Quick controls',
-  dashboard: 'Open dashboard', report: 'Open report', schemes: 'Open schemes', signout: 'Sign out', back: 'Back to home',
+  restricted: 'Restricted Access',
+  title: 'Nirnay AI Admin Portal',
+  body: 'One administrator only. Sign in with the configured Admin ID and password.',
+  loginId: 'Admin ID',
+  password: 'Password',
+  send: 'Sign in securely',
+  unauthorized: 'This account is not the authorised Nirnay AI administrator.',
+  console: 'Administration Console',
+  subtitle: 'Live citizen, assessment and report activity from the protected database.',
+  citizens: 'Verified citizens', assessments: 'Saved assessments', reports: 'Generated reports', analyses: 'AI analyses',
+  quick: 'Quick controls', dashboard: 'Open dashboard', report: 'Open report', schemes: 'Open schemes', signout: 'Sign out', back: 'Back to home',
+  activity: 'Recent database activity', security: 'Admin ID is mapped server-side to the single database-authorised admin account. The password is verified by Supabase Auth and is never stored in frontend code.',
 };
 
 const COPY: Record<LanguageCode, Copy> = {
   en: EN,
-  hi: { ...EN, restricted:'प्रतिबंधित प्रवेश', title:'निर्णय AI एडमिन पोर्टल', body:'केवल डेटाबेस में अधिकृत एकमात्र एडमिन इस कंसोल को खोल सकता है।', email:'एडमिन ईमेल', send:'सुरक्षित एडमिन लिंक भेजें', sent:'सुरक्षित साइन-इन लिंक भेज दिया गया है। ईमेल खोलें और फिर एडमिन पोर्टल पर लौटें।', unauthorized:'यह खाता अधिकृत Nirnay AI एडमिन नहीं है।', console:'प्रशासन कंसोल', subtitle:'प्रोडक्शन डेटाबेस से लाइव नागरिक, आकलन और रिपोर्ट गतिविधि।', citizens:'सत्यापित नागरिक', assessments:'सहेजे गए आकलन', reports:'बनाई गई रिपोर्ट', analyses:'AI विश्लेषण', quick:'त्वरित नियंत्रण', dashboard:'डैशबोर्ड खोलें', report:'रिपोर्ट खोलें', schemes:'योजनाएँ खोलें', signout:'लॉगआउट', back:'होम पर वापस' },
-  bn: { ...EN, restricted:'সীমিত প্রবেশ', title:'Nirnay AI অ্যাডমিন পোর্টাল', email:'অ্যাডমিন ইমেল', send:'নিরাপদ অ্যাডমিন লিংক পাঠান', unauthorized:'এই অ্যাকাউন্ট অনুমোদিত অ্যাডমিন নয়।', console:'অ্যাডমিন কনসোল', citizens:'যাচাইকৃত নাগরিক', assessments:'সংরক্ষিত মূল্যায়ন', reports:'রিপোর্ট', analyses:'AI বিশ্লেষণ', back:'হোমে ফিরুন' },
-  mr: { ...EN, restricted:'मर्यादित प्रवेश', title:'Nirnay AI अॅडमिन पोर्टल', email:'अॅडमिन ईमेल', send:'सुरक्षित अॅडमिन लिंक पाठवा', unauthorized:'हे खाते अधिकृत अॅडमिन नाही.', console:'प्रशासन कन्सोल', citizens:'सत्यापित नागरिक', assessments:'जतन केलेले मूल्यांकन', reports:'अहवाल', analyses:'AI विश्लेषणे', back:'मुख्यपृष्ठावर परत' },
-  ta: { ...EN, restricted:'கட்டுப்படுத்தப்பட்ட அணுகல்', title:'Nirnay AI நிர்வாக போர்டல்', email:'நிர்வாகி மின்னஞ்சல்', send:'பாதுகாப்பான நிர்வாக இணைப்பை அனுப்பவும்', unauthorized:'இந்த கணக்கு அங்கீகரிக்கப்பட்ட நிர்வாகி அல்ல.', console:'நிர்வாக கட்டுப்பாட்டு மையம்', citizens:'சரிபார்க்கப்பட்ட குடிமக்கள்', assessments:'சேமித்த மதிப்பீடுகள்', reports:'அறிக்கைகள்', analyses:'AI பகுப்பாய்வுகள்', back:'முகப்புக்கு' },
-  te: { ...EN, restricted:'పరిమిత ప్రవేశం', title:'Nirnay AI అడ్మిన్ పోర్టల్', email:'అడ్మిన్ ఇమెయిల్', send:'సురక్షిత అడ్మిన్ లింక్ పంపండి', unauthorized:'ఈ ఖాతా అధీకృత అడ్మిన్ కాదు.', console:'అడ్మిన్ కన్సోల్', citizens:'ధృవీకరించిన పౌరులు', assessments:'సేవ్ చేసిన అంచనాలు', reports:'రిపోర్టులు', analyses:'AI విశ్లేషణలు', back:'హోమ్‌కు' },
-  kn: { ...EN, restricted:'ನಿರ್ಬಂಧಿತ ಪ್ರವೇಶ', title:'Nirnay AI ಆಡ್ಮಿನ್ ಪೋರ್ಟಲ್', email:'ಆಡ್ಮಿನ್ ಇಮೇಲ್', send:'ಸುರಕ್ಷಿತ ಆಡ್ಮಿನ್ ಲಿಂಕ್ ಕಳುಹಿಸಿ', unauthorized:'ಈ ಖಾತೆ ಅಧಿಕೃತ ಆಡ್ಮಿನ್ ಅಲ್ಲ.', console:'ಆಡಳಿತ ಕನ್ಸೋಲ್', citizens:'ಪರಿಶೀಲಿತ ನಾಗರಿಕರು', assessments:'ಉಳಿಸಿದ ಮೌಲ್ಯಮಾಪನಗಳು', reports:'ವರದಿಗಳು', analyses:'AI ವಿಶ್ಲೇಷಣೆಗಳು', back:'ಮುಖಪುಟಕ್ಕೆ' },
-  gu: { ...EN, restricted:'પ્રતિબંધિત પ્રવેશ', title:'Nirnay AI એડમિન પોર્ટલ', email:'એડમિન ઈમેલ', send:'સુરક્ષિત એડમિન લિંક મોકલો', unauthorized:'આ ખાતું અધિકૃત એડમિન નથી.', console:'એડમિન કન્સોલ', citizens:'ચકાસાયેલ નાગરિકો', assessments:'સાચવેલા મૂલ્યાંકન', reports:'રિપોર્ટ', analyses:'AI વિશ્લેષણ', back:'હોમ પર પાછા' },
-  pa: { ...EN, restricted:'ਪਾਬੰਦੀਸ਼ੁਦਾ ਪਹੁੰਚ', title:'Nirnay AI ਐਡਮਿਨ ਪੋਰਟਲ', email:'ਐਡਮਿਨ ਈਮੇਲ', send:'ਸੁਰੱਖਿਅਤ ਐਡਮਿਨ ਲਿੰਕ ਭੇਜੋ', unauthorized:'ਇਹ ਖਾਤਾ ਅਧਿਕਾਰਤ ਐਡਮਿਨ ਨਹੀਂ ਹੈ।', console:'ਐਡਮਿਨ ਕਨਸੋਲ', citizens:'ਪੁਸ਼ਟੀ ਕੀਤੇ ਨਾਗਰਿਕ', assessments:'ਸੇਵ ਕੀਤੇ ਮੁਲਾਂਕਣ', reports:'ਰਿਪੋਰਟਾਂ', analyses:'AI ਵਿਸ਼ਲੇਸ਼ਣ', back:'ਹੋਮ ਤੇ ਵਾਪਸ' },
+  hi: { ...EN, restricted:'प्रतिबंधित प्रवेश', title:'निर्णय AI एडमिन पोर्टल', body:'केवल एक एडमिन। कॉन्फ़िगर किए गए एडमिन ID और पासवर्ड से लॉगिन करें।', loginId:'एडमिन ID', password:'पासवर्ड', send:'सुरक्षित लॉगिन', unauthorized:'यह खाता अधिकृत Nirnay AI एडमिन नहीं है।', console:'प्रशासन कंसोल', subtitle:'सुरक्षित डेटाबेस से लाइव नागरिक, आकलन और रिपोर्ट गतिविधि।', citizens:'सत्यापित नागरिक', assessments:'सहेजे गए आकलन', reports:'बनाई गई रिपोर्ट', analyses:'AI विश्लेषण', quick:'त्वरित नियंत्रण', dashboard:'डैशबोर्ड खोलें', report:'रिपोर्ट खोलें', schemes:'योजनाएँ खोलें', signout:'लॉगआउट', back:'होम पर वापस', activity:'हाल की डेटाबेस गतिविधि', security:'एडमिन ID सर्वर पर एकमात्र अधिकृत डेटाबेस एडमिन से मैप होती है। पासवर्ड Supabase Auth से सत्यापित होता है और फ्रंटएंड कोड में सेव नहीं होता।' },
+  bn: { ...EN, restricted:'সীমিত প্রবেশ', title:'Nirnay AI অ্যাডমিন পোর্টাল', body:'শুধু একজন অ্যাডমিন। কনফিগার করা Admin ID ও পাসওয়ার্ড দিয়ে সাইন ইন করুন।', loginId:'অ্যাডমিন ID', password:'পাসওয়ার্ড', send:'নিরাপদে সাইন ইন', console:'অ্যাডমিন কনসোল', citizens:'যাচাইকৃত নাগরিক', assessments:'সংরক্ষিত মূল্যায়ন', reports:'রিপোর্ট', analyses:'AI বিশ্লেষণ', back:'হোমে ফিরুন', activity:'সাম্প্রতিক ডেটাবেস কার্যকলাপ' },
+  mr: { ...EN, restricted:'मर्यादित प्रवेश', title:'Nirnay AI अॅडमिन पोर्टल', body:'फक्त एक अॅडमिन. कॉन्फिगर केलेल्या Admin ID आणि पासवर्डने साइन इन करा.', loginId:'अॅडमिन ID', password:'पासवर्ड', send:'सुरक्षित साइन इन', console:'प्रशासन कन्सोल', citizens:'सत्यापित नागरिक', assessments:'जतन केलेले मूल्यांकन', reports:'अहवाल', analyses:'AI विश्लेषणे', back:'मुख्यपृष्ठावर परत', activity:'अलीकडील डेटाबेस क्रिया' },
+  ta: { ...EN, restricted:'கட்டுப்படுத்தப்பட்ட அணுகல்', title:'Nirnay AI நிர்வாக போர்டல்', body:'ஒரே ஒரு நிர்வாகி. அமைக்கப்பட்ட Admin ID மற்றும் கடவுச்சொல்லால் உள்நுழையவும்.', loginId:'நிர்வாக ID', password:'கடவுச்சொல்', send:'பாதுகாப்பாக உள்நுழை', console:'நிர்வாக கட்டுப்பாட்டு மையம்', citizens:'சரிபார்க்கப்பட்ட குடிமக்கள்', assessments:'சேமித்த மதிப்பீடுகள்', reports:'அறிக்கைகள்', analyses:'AI பகுப்பாய்வுகள்', back:'முகப்புக்கு', activity:'சமீபத்திய தரவுத்தள செயல்பாடு' },
+  te: { ...EN, restricted:'పరిమిత ప్రవేశం', title:'Nirnay AI అడ్మిన్ పోర్టల్', body:'ఒక అడ్మిన్ మాత్రమే. కాన్ఫిగర్ చేసిన Admin ID మరియు పాస్‌వర్డ్‌తో లాగిన్ అవ్వండి.', loginId:'అడ్మిన్ ID', password:'పాస్‌వర్డ్', send:'సురక్షిత లాగిన్', console:'అడ్మిన్ కన్సోల్', citizens:'ధృవీకరించిన పౌరులు', assessments:'సేవ్ చేసిన అంచనాలు', reports:'రిపోర్టులు', analyses:'AI విశ్లేషణలు', back:'హోమ్‌కు', activity:'ఇటీవలి డేటాబేస్ కార్యకలాపం' },
+  kn: { ...EN, restricted:'ನಿರ್ಬಂಧಿತ ಪ್ರವೇಶ', title:'Nirnay AI ಆಡ್ಮಿನ್ ಪೋರ್ಟಲ್', body:'ಒಬ್ಬ ಆಡ್ಮಿನ್ ಮಾತ್ರ. ಕಾನ್ಫಿಗರ್ ಮಾಡಿದ Admin ID ಮತ್ತು ಪಾಸ್‌ವರ್ಡ್‌ನೊಂದಿಗೆ ಲಾಗಿನ್ ಮಾಡಿ.', loginId:'ಆಡ್ಮಿನ್ ID', password:'ಪಾಸ್‌ವರ್ಡ್', send:'ಸುರಕ್ಷಿತ ಲಾಗಿನ್', console:'ಆಡಳಿತ ಕನ್ಸೋಲ್', citizens:'ಪರಿಶೀಲಿತ ನಾಗರಿಕರು', assessments:'ಉಳಿಸಿದ ಮೌಲ್ಯಮಾಪನಗಳು', reports:'ವರದಿಗಳು', analyses:'AI ವಿಶ್ಲೇಷಣೆಗಳು', back:'ಮುಖಪುಟಕ್ಕೆ', activity:'ಇತ್ತೀಚಿನ ಡೇಟಾಬೇಸ್ ಚಟುವಟಿಕೆ' },
+  gu: { ...EN, restricted:'પ્રતિબંધિત પ્રવેશ', title:'Nirnay AI એડમિન પોર્ટલ', body:'માત્ર એક એડમિન. કૉન્ફિગર કરેલા Admin ID અને પાસવર્ડથી લૉગિન કરો.', loginId:'એડમિન ID', password:'પાસવર્ડ', send:'સુરક્ષિત લૉગિન', console:'એડમિન કન્સોલ', citizens:'ચકાસાયેલ નાગરિકો', assessments:'સાચવેલા મૂલ્યાંકન', reports:'રિપોર્ટ', analyses:'AI વિશ્લેષણ', back:'હોમ પર પાછા', activity:'તાજેતરની ડેટાબેસ પ્રવૃત્તિ' },
+  pa: { ...EN, restricted:'ਪਾਬੰਦੀਸ਼ੁਦਾ ਪਹੁੰਚ', title:'Nirnay AI ਐਡਮਿਨ ਪੋਰਟਲ', body:'ਸਿਰਫ਼ ਇੱਕ ਐਡਮਿਨ। ਕਨਫਿਗਰ ਕੀਤੇ Admin ID ਅਤੇ ਪਾਸਵਰਡ ਨਾਲ ਲਾਗਇਨ ਕਰੋ।', loginId:'ਐਡਮਿਨ ID', password:'ਪਾਸਵਰਡ', send:'ਸੁਰੱਖਿਅਤ ਲਾਗਇਨ', console:'ਐਡਮਿਨ ਕਨਸੋਲ', citizens:'ਪੁਸ਼ਟੀ ਕੀਤੇ ਨਾਗਰਿਕ', assessments:'ਸੇਵ ਕੀਤੇ ਮੁਲਾਂਕਣ', reports:'ਰਿਪੋਰਟਾਂ', analyses:'AI ਵਿਸ਼ਲੇਸ਼ਣ', back:'ਹੋਮ ਤੇ ਵਾਪਸ', activity:'ਹਾਲੀਆ ਡੇਟਾਬੇਸ ਗਤੀਵਿਧੀ' },
 };
 
-type Status = 'checking' | 'signed-out' | 'link-sent' | 'unauthorized' | 'admin';
+type Status = 'checking' | 'signed-out' | 'unauthorized' | 'admin';
 
-export const AdminPortalPage: React.FC<AdminPortalPageProps> = ({
-  language,
-  onBack,
-  onNavigate,
-  projectCost,
-  feasibilityScore,
-}) => {
+export const AdminPortalPage: React.FC<AdminPortalPageProps> = ({ language, onBack, onNavigate, projectCost, feasibilityScore }) => {
   const c = COPY[language] || EN;
   const [status, setStatus] = useState<Status>('checking');
-  const [email, setEmail] = useState('');
+  const [loginId, setLoginId] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState({ citizens: 0, assessments: 0, reports: 0, analyses: 0 });
   const [activity, setActivity] = useState<Array<{ action: string; entity_type: string | null; created_at: string }>>([]);
-  const [currentEmail, setCurrentEmail] = useState('');
 
   const currency = useMemo(
     () => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(projectCost),
     [projectCost]
   );
 
+  const loadAdminData = async () => {
+    const [liveStats, recent] = await Promise.all([getAdminStats(), getRecentAdminActivity()]);
+    setStats(liveStats);
+    setActivity(recent);
+  };
+
   const checkAccess = async () => {
     setStatus('checking');
     setError('');
-    const { data: userData } = await supabase.auth.getUser();
-    setCurrentEmail(userData.user?.email || '');
     const role = await getCurrentRole();
-
-    if (!role) {
-      setStatus('signed-out');
-      return;
-    }
-    if (role !== 'admin') {
-      setStatus('unauthorized');
-      return;
-    }
-
+    if (!role) return setStatus('signed-out');
+    if (role !== 'admin') return setStatus('unauthorized');
     setStatus('admin');
-    try {
-      const [liveStats, recent] = await Promise.all([getAdminStats(), getRecentAdminActivity()]);
-      setStats(liveStats);
-      setActivity(recent);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to load admin data.');
-    }
+    try { await loadAdminData(); } catch (err) { setError(err instanceof Error ? err.message : 'Unable to load admin data.'); }
   };
 
   useEffect(() => {
     void checkAccess();
-    const { data } = supabase.auth.onAuthStateChange(() => {
-      window.setTimeout(() => void checkAccess(), 0);
-    });
+    const { data } = supabase.auth.onAuthStateChange(() => window.setTimeout(() => void checkAccess(), 0));
     return () => data.subscription.unsubscribe();
   }, []);
 
-  const handleSendLink = async () => {
+  const handleLogin = async () => {
+    if (!loginId.trim() || !password) return setError('Admin ID and password are required.');
     setLoading(true);
     setError('');
     try {
-      await sendAdminMagicLink(email);
-      setStatus('link-sent');
+      await signInAdminWithIdPassword(loginId, password);
+      setPassword('');
+      setStatus('admin');
+      await loadAdminData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to send admin sign-in link.');
+      setError(err instanceof Error ? err.message : 'Admin sign-in failed.');
+      setStatus('signed-out');
     } finally {
       setLoading(false);
     }
@@ -142,47 +135,41 @@ export const AdminPortalPage: React.FC<AdminPortalPageProps> = ({
 
   const handleSignOut = async () => {
     await signOut();
+    setPassword('');
     setStatus('signed-out');
-    setCurrentEmail('');
   };
 
   if (status === 'checking') {
-    return <div className="flex min-h-screen items-center justify-center bg-[#F8F2E8]"><Loader2 className="h-8 w-8 animate-spin text-[#A97838]" /></div>;
+    return <div className="min-h-screen bg-[#F8F2E8] flex items-center justify-center text-[#6B4535]"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   }
 
   if (status !== 'admin') {
     return (
-      <div className="min-h-screen bg-[#F8F2E8] px-4 py-8 text-[#281C13]">
-        <div className="mx-auto max-w-xl">
-          <button onClick={onBack} className="flex items-center gap-2 text-sm font-bold text-[#76532C]"><ArrowLeft className="h-4 w-4" />{c.back}</button>
-          <div className="mt-8 rounded-[28px] border border-[#DFD2C1] bg-[#FFFDF8] p-7 shadow-[0_25px_70px_rgba(72,47,25,.12)] sm:p-9">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#F0E1CA] text-[#8D5D28]"><LockKeyhole className="h-7 w-7" /></div>
-            <p className="mt-6 text-xs font-extrabold uppercase tracking-[.16em] text-[#9A6A31]">{c.restricted}</p>
+      <div className="min-h-screen bg-[#F8F2E8] px-4 py-8 text-[#281C13] sm:px-6">
+        <div className="mx-auto max-w-5xl">
+          <button onClick={onBack} className="inline-flex items-center gap-2 text-sm font-bold text-[#76532C]"><ArrowLeft className="h-4 w-4" /> {c.back}</button>
+          <div className="mx-auto mt-10 max-w-md rounded-[30px] border border-[#DFD2C1] bg-[#FFFDF8] p-7 shadow-[0_28px_80px_rgba(72,47,25,.12)] sm:p-9">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#F0E1CA] text-[#7A4D32]"><LockKeyhole className="h-7 w-7" /></div>
+            <p className="mt-5 text-xs font-extrabold uppercase tracking-[.16em] text-[#9A6A31]">{c.restricted}</p>
             <h1 className="mt-2 font-serif text-3xl font-bold">{c.title}</h1>
-            <p className="mt-3 text-sm leading-7 text-[#75675B]">{c.body}</p>
+            <p className="mt-3 text-sm leading-6 text-[#75675B]">{status === 'unauthorized' ? c.unauthorized : c.body}</p>
 
-            {status === 'unauthorized' ? (
-              <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-800">
-                <strong>{c.unauthorized}</strong>
-                {currentEmail && <div className="mt-2 text-xs">{currentEmail}</div>}
-                <button onClick={handleSignOut} className="mt-4 flex items-center gap-2 font-bold"><LogOut className="h-4 w-4" />{c.signout}</button>
-              </div>
-            ) : status === 'link-sent' ? (
-              <div className="mt-6 rounded-2xl border border-[#D9C7AE] bg-[#F7EDDF] p-5">
-                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#E8D4B6] text-[#8D5D28]"><Mail className="h-5 w-5" /></div>
-                <p className="mt-4 text-sm leading-7 text-[#6D5E51]">{c.sent}</p>
-                <button onClick={() => setStatus('signed-out')} className="mt-4 text-sm font-bold text-[#80572A]">Try another email</button>
-              </div>
-            ) : (
-              <div className="mt-6">
-                <label className="text-sm font-bold">{c.email}</label>
-                <div className="mt-2 flex items-center rounded-xl border border-[#DCCFBE] bg-white px-4 focus-within:border-[#A97838]"><Mail className="h-4 w-4 text-[#9A6A31]" /><input value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-3 py-3 outline-none" placeholder="admin@example.com" /></div>
-                {error && <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-                <button onClick={handleSendLink} disabled={loading} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[#281C13] px-5 py-3.5 font-bold text-white disabled:opacity-60">{loading && <Loader2 className="h-4 w-4 animate-spin" />}{c.send}</button>
-              </div>
+            {status === 'unauthorized' && (
+              <button onClick={handleSignOut} className="mt-5 w-full rounded-xl border border-[#D7C4AA] bg-white px-4 py-3 text-sm font-bold text-[#6B4535]">{c.signout}</button>
             )}
 
-            <div className="mt-6 flex gap-2 border-t border-[#E9DED0] pt-5 text-xs leading-5 text-[#837366]"><ShieldCheck className="h-4 w-4 shrink-0 text-[#9C6A30]" />Role access is verified from PostgreSQL, not from browser-side credentials.</div>
+            {status !== 'unauthorized' && (
+              <>
+                <label className="mt-6 block text-sm font-bold">{c.loginId}</label>
+                <input value={loginId} onChange={(e) => setLoginId(e.target.value)} autoComplete="username" className="mt-2 w-full rounded-xl border border-[#DCCFBE] bg-white px-4 py-3 outline-none focus:border-[#A97838]" />
+                <label className="mt-5 block text-sm font-bold">{c.password}</label>
+                <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" autoComplete="current-password" onKeyDown={(e) => { if (e.key === 'Enter') void handleLogin(); }} className="mt-2 w-full rounded-xl border border-[#DCCFBE] bg-white px-4 py-3 outline-none focus:border-[#A97838]" />
+                {error && <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+                <button onClick={handleLogin} disabled={loading} className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#4A2F24] px-5 py-3.5 font-bold text-white transition hover:bg-[#2B1B16] disabled:opacity-60">{loading && <Loader2 className="h-4 w-4 animate-spin" />} {c.send}</button>
+              </>
+            )}
+
+            <div className="mt-6 flex items-start gap-2 border-t border-[#E9DED0] pt-5 text-xs leading-5 text-[#837366]"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#9C6A30]" />{c.security}</div>
           </div>
         </div>
       </div>
@@ -190,59 +177,57 @@ export const AdminPortalPage: React.FC<AdminPortalPageProps> = ({
   }
 
   return (
-    <div className="min-h-screen bg-[#F8F2E8] px-4 py-7 text-[#281C13] sm:px-7">
-      <div className="mx-auto max-w-7xl">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#281C13] text-white"><UserRoundCog className="h-6 w-6" /></div><div><p className="text-xs font-extrabold uppercase tracking-[.15em] text-[#9A6A31]">Nirnay AI</p><h1 className="font-serif text-3xl font-bold">{c.console}</h1><p className="mt-1 text-sm text-[#75675B]">{c.subtitle}</p></div></div>
-          <div className="flex gap-2"><button onClick={onBack} className="rounded-xl border border-[#D7C4AA] bg-white px-4 py-2.5 text-sm font-bold">{c.back}</button><button onClick={handleSignOut} className="flex items-center gap-2 rounded-xl bg-[#281C13] px-4 py-2.5 text-sm font-bold text-white"><LogOut className="h-4 w-4" />{c.signout}</button></div>
+    <div className="min-h-screen bg-[#F8F2E8] px-4 py-7 text-[#281C13] sm:px-6">
+      <div className="mx-auto max-w-7xl space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <button onClick={onBack} className="inline-flex items-center gap-2 text-sm font-bold text-[#76532C]"><ArrowLeft className="h-4 w-4" /> {c.back}</button>
+          <button onClick={handleSignOut} className="inline-flex items-center gap-2 rounded-xl border border-[#D7C4AA] bg-white px-4 py-2.5 text-xs font-extrabold text-[#59402A]"><LogOut className="h-4 w-4" /> {c.signout}</button>
         </div>
 
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Stat icon={<Users />} label={c.citizens} value={String(stats.citizens)} />
-          <Stat icon={<BarChart3 />} label={c.assessments} value={String(stats.assessments)} />
-          <Stat icon={<FileText />} label={c.reports} value={String(stats.reports)} />
-          <Stat icon={<Sprout />} label={c.analyses} value={String(stats.analyses)} />
-        </div>
+        <section className="rounded-3xl bg-[#3F2A21] p-6 text-white sm:p-8">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div><div className="flex items-center gap-2 text-[#DFC6A8]"><UserRoundCog className="h-5 w-5" /><span className="text-xs font-extrabold uppercase tracking-widest">{c.console}</span></div><h1 className="mt-2 font-serif text-3xl font-bold">NIRNAY AI</h1><p className="mt-2 max-w-2xl text-sm text-white/75">{c.subtitle}</p></div>
+            <div className="rounded-2xl bg-white/10 px-4 py-3 text-right"><div className="text-[10px] uppercase tracking-wider text-white/60">Current demo project</div><div className="text-xl font-black">{currency}</div><div className="text-xs text-white/70">Feasibility {feasibilityScore}/100</div></div>
+          </div>
+        </section>
 
-        <div className="mt-5 grid gap-5 lg:grid-cols-[1.1fr_.9fr]">
-          <div className="rounded-3xl border border-[#DFD2C1] bg-[#FFFDF8] p-6 shadow-sm">
-            <h2 className="font-serif text-xl font-bold">{c.quick}</h2>
-            <div className="mt-5 grid gap-3 sm:grid-cols-3">
-              <Quick icon={<BarChart3 />} label={c.dashboard} onClick={() => onNavigate('dashboard')} />
-              <Quick icon={<FileText />} label={c.report} onClick={() => onNavigate('report')} />
-              <Quick icon={<Landmark />} label={c.schemes} onClick={() => onNavigate('schemes')} />
-            </div>
-            <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl bg-[#F7EDDF] p-5"><p className="text-xs text-[#806F62]">Current project cost</p><strong className="mt-1 block text-2xl">{currency}</strong></div>
-              <div className="rounded-2xl bg-[#F7EDDF] p-5"><p className="text-xs text-[#806F62]">Feasibility score</p><strong className="mt-1 block text-2xl">{feasibilityScore}/100</strong></div>
+        {error && <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+
+        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <Stat icon={Users} label={c.citizens} value={stats.citizens} />
+          <Stat icon={Sprout} label={c.assessments} value={stats.assessments} />
+          <Stat icon={FileText} label={c.reports} value={stats.reports} />
+          <Stat icon={BarChart3} label={c.analyses} value={stats.analyses} />
+        </section>
+
+        <section className="grid gap-5 lg:grid-cols-[1fr_320px]">
+          <div className="rounded-3xl border border-[#DFD2C1] bg-[#FFFDF8] p-6">
+            <h2 className="text-sm font-black uppercase tracking-wider text-[#6B4535]">{c.activity}</h2>
+            <div className="mt-4 space-y-2">
+              {activity.length ? activity.map((item, index) => (
+                <div key={`${item.created_at}-${index}`} className="flex items-center justify-between gap-4 rounded-xl border border-[#E8D9C8] bg-white px-4 py-3 text-xs"><div><div className="font-extrabold text-[#2B1B16]">{item.action.replaceAll('_', ' ')}</div><div className="text-[#8B5E47]">{item.entity_type || 'system'}</div></div><div className="text-right text-[10px] text-[#8B5E47]">{new Date(item.created_at).toLocaleString()}</div></div>
+              )) : <p className="text-sm text-[#8B5E47]">No recent activity.</p>}
             </div>
           </div>
 
-          <div className="rounded-3xl border border-[#DFD2C1] bg-[#FFFDF8] p-6 shadow-sm">
-            <div className="flex items-center gap-2"><CheckCircle2 className="h-5 w-5 text-[#678046]" /><h2 className="font-serif text-xl font-bold">Backend status</h2></div>
-            <div className="mt-5 space-y-3 text-sm">
-              <StatusRow label="Supabase Auth" />
-              <StatusRow label="PostgreSQL + RLS" />
-              <StatusRow label="Single-admin role constraint" />
-              <StatusRow label="Persistent assessments" />
+          <div className="rounded-3xl border border-[#DFD2C1] bg-[#FFFDF8] p-6">
+            <h2 className="text-sm font-black uppercase tracking-wider text-[#6B4535]">{c.quick}</h2>
+            <div className="mt-4 space-y-2">
+              <Quick icon={BarChart3} label={c.dashboard} onClick={() => onNavigate('dashboard')} />
+              <Quick icon={FileText} label={c.report} onClick={() => onNavigate('report')} />
+              <Quick icon={Landmark} label={c.schemes} onClick={() => onNavigate('schemes')} />
             </div>
-            {activity.length > 0 && <div className="mt-6 border-t border-[#E9DED0] pt-5"><p className="text-xs font-bold uppercase tracking-[.12em] text-[#9A6A31]">Recent activity</p>{activity.map((item, index) => <div key={`${item.created_at}-${index}`} className="mt-3 text-xs text-[#6D5E51]">{item.action} · {new Date(item.created_at).toLocaleString()}</div>)}</div>}
-            {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
           </div>
-        </div>
+        </section>
       </div>
     </div>
   );
 };
 
-const Stat: React.FC<{ icon: React.ReactNode; label: string; value: string }> = ({ icon, label, value }) => (
-  <div className="rounded-2xl border border-[#DFD2C1] bg-[#FFFDF8] p-5 shadow-sm"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F0E1CA] text-[#9A6A31]">{icon}</div><p className="mt-4 text-xs text-[#7E6D5F]">{label}</p><strong className="mt-1 block text-3xl">{value}</strong></div>
-);
+function Stat({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: number }) {
+  return <div className="rounded-2xl border border-[#DFD2C1] bg-[#FFFDF8] p-5"><Icon className="h-5 w-5 text-[#8B5E47]" /><div className="mt-3 text-3xl font-black text-[#2B1B16]">{value}</div><div className="mt-1 text-xs font-bold text-[#8B5E47]">{label}</div></div>;
+}
 
-const Quick: React.FC<{ icon: React.ReactNode; label: string; onClick: () => void }> = ({ icon, label, onClick }) => (
-  <button onClick={onClick} className="flex items-center gap-3 rounded-2xl border border-[#E2D6C6] bg-white p-4 text-left text-sm font-bold transition hover:-translate-y-0.5 hover:border-[#CBAA80] hover:shadow-md"><span className="text-[#9A6A31]">{icon}</span>{label}</button>
-);
-
-const StatusRow: React.FC<{ label: string }> = ({ label }) => (
-  <div className="flex items-center justify-between rounded-xl bg-[#F8F0E5] px-4 py-3"><span>{label}</span><span className="flex items-center gap-1 text-xs font-bold text-[#617B42]"><CheckCircle2 className="h-4 w-4" />Active</span></div>
-);
+function Quick({ icon: Icon, label, onClick }: { icon: React.ElementType; label: string; onClick: () => void }) {
+  return <button onClick={onClick} className="flex w-full items-center gap-3 rounded-xl border border-[#E8D9C8] bg-white px-4 py-3 text-left text-xs font-extrabold text-[#4A2F24] transition hover:bg-[#F4E9DA]"><Icon className="h-4 w-4 text-[#8B5E47]" />{label}</button>;
+}
