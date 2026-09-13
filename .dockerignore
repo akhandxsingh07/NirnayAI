@@ -1,5 +1,6 @@
 node_modules
 dist
+dist-server
 build
 coverage
 .git
@@ -8,5 +9,6 @@ coverage
 .env.*
 !.env.example
 *.log
+*.zip
 .DS_Store
 npm-debug.log*
