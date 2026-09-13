@@ -7,9 +7,7 @@ export type LoginMethod = 'mobile' | 'email';
 function normalizeIndianPhone(value: string): string {
   const digits = value.replace(/\D/g, '');
   const local = digits.startsWith('91') && digits.length === 12 ? digits.slice(2) : digits;
-  if (!/^[6-9]\d{9}$/.test(local)) {
-    throw new Error('Enter a valid 10-digit Indian mobile number.');
-  }
+  if (!/^[6-9]\d{9}$/.test(local)) throw new Error('Enter a valid 10-digit Indian mobile number.');
   return `+91${local}`;
 }
 
@@ -23,30 +21,20 @@ export async function sendCitizenLogin(
     const phone = normalizeIndianPhone(identifier);
     const { error } = await supabase.auth.signInWithOtp({
       phone,
-      options: {
-        data: {
-          display_name: displayName,
-          preferred_language: language,
-        },
-      },
+      options: { data: { display_name: displayName, preferred_language: language } },
     });
     if (error) throw error;
     return { delivery: 'otp', normalizedIdentifier: phone };
   }
 
   const email = identifier.trim().toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    throw new Error('Enter a valid email address.');
-  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('Enter a valid email address.');
 
   const { error } = await supabase.auth.signInWithOtp({
     email,
     options: {
       emailRedirectTo: window.location.origin,
-      data: {
-        display_name: displayName,
-        preferred_language: language,
-      },
+      data: { display_name: displayName, preferred_language: language },
     },
   });
   if (error) throw error;
@@ -54,11 +42,7 @@ export async function sendCitizenLogin(
 }
 
 export async function verifyCitizenPhoneOtp(phone: string, token: string): Promise<CitizenSession> {
-  const { data, error } = await supabase.auth.verifyOtp({
-    phone,
-    token,
-    type: 'sms',
-  });
+  const { data, error } = await supabase.auth.verifyOtp({ phone, token, type: 'sms' });
   if (error) throw error;
   if (!data.user) throw new Error('Unable to verify this login.');
 
@@ -68,17 +52,12 @@ export async function verifyCitizenPhoneOtp(phone: string, token: string): Promi
 }
 
 export async function getCurrentCitizenSession(): Promise<CitizenSession | null> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
   return buildCitizenSession(user, user.phone ? 'mobile' : 'email');
 }
 
-async function buildCitizenSession(
-  user: User,
-  fallbackMethod: LoginMethod
-): Promise<CitizenSession | null> {
+async function buildCitizenSession(user: User, fallbackMethod: LoginMethod): Promise<CitizenSession | null> {
   const { data: profile, error } = await supabase
     .from('profiles')
     .select('display_name, role, email, phone')
@@ -86,7 +65,6 @@ async function buildCitizenSession(
     .single();
 
   if (error || !profile || profile.role !== 'citizen') return null;
-
   const method: LoginMethod = user.phone ? 'mobile' : fallbackMethod;
   const identifier = profile.phone || profile.email || user.phone || user.email || '';
 
@@ -98,27 +76,36 @@ async function buildCitizenSession(
   };
 }
 
-export async function sendAdminMagicLink(email: string): Promise<void> {
-  const normalized = email.trim().toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
-    throw new Error('Enter a valid administrator email address.');
-  }
+/**
+ * Admin credentials are submitted only to the same-origin Express server. The
+ * server maps ADMIN_LOGIN_ID to the single authorised Supabase admin email,
+ * verifies the password with Supabase Auth, and returns a short-lived session.
+ */
+export async function signInAdminWithIdPassword(loginId: string, password: string): Promise<void> {
+  const response = await fetch('/api/admin/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ loginId: loginId.trim(), password }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.error || 'Admin sign-in failed.');
+  if (!payload?.accessToken || !payload?.refreshToken) throw new Error('Admin session was not returned.');
 
-  const { error } = await supabase.auth.signInWithOtp({
-    email: normalized,
-    options: {
-      shouldCreateUser: true,
-      emailRedirectTo: window.location.origin,
-      data: { display_name: 'Nirnay Administrator' },
-    },
+  const { error } = await supabase.auth.setSession({
+    access_token: payload.accessToken,
+    refresh_token: payload.refreshToken,
   });
   if (error) throw error;
+
+  const role = await getCurrentRole();
+  if (role !== 'admin') {
+    await supabase.auth.signOut();
+    throw new Error('This account is not the authorised Nirnay AI administrator.');
+  }
 }
 
 export async function getCurrentRole(): Promise<'citizen' | 'admin' | null> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
 
   const { data, error } = await supabase.from('profiles').select('role').eq('id', user.id).single();
