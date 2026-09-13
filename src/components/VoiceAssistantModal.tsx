@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, Mic, MicOff, Send, Sparkles, Volume2, X } from 'lucide-react';
+import { AlertCircle, Mic, MicOff, Send, Sparkles, Volume2, VolumeX, X } from 'lucide-react';
 import type { LanguageCode } from '../types';
 import {
   askNirnayQuestion,
@@ -22,7 +22,6 @@ interface Message {
 
 type UiCopy = {
   title: string;
-  voiceFirst: string;
   subtitle: string;
   greeting: string;
   unsupported: string;
@@ -32,119 +31,44 @@ type UiCopy = {
   listening: string;
   stop: string;
   readAloud: string;
-  basis: string;
-  fallbackBasis: string;
   error: string;
+  voiceOn: string;
+  voiceOff: string;
+  speaking: string;
   prompts: string[];
 };
 
 const SPEECH_LOCALES: Record<LanguageCode, string> = {
-  en: 'en-IN',
-  hi: 'hi-IN',
-  bn: 'bn-IN',
-  mr: 'mr-IN',
-  ta: 'ta-IN',
-  te: 'te-IN',
-  kn: 'kn-IN',
-  gu: 'gu-IN',
-  pa: 'pa-IN',
+  en: 'en-IN', hi: 'hi-IN', bn: 'bn-IN', mr: 'mr-IN', ta: 'ta-IN',
+  te: 'te-IN', kn: 'kn-IN', gu: 'gu-IN', pa: 'pa-IN',
 };
 
 const UI_COPY: Record<LanguageCode, UiCopy> = {
-  en: {
-    title: 'Ask NIRNAY AI', voiceFirst: 'Voice + Text', subtitle: 'Hyper-local business, finance & scheme advisor',
-    greeting: 'Namaste! I can use your district, skill, capital, land, experience and business plan to give a more specific answer. Ask me about business ideas, customers, pricing, finance, schemes, risks, licences or a 90-day action plan.',
-    unsupported: 'Voice input is not supported in this browser. You can still type your question.',
-    loading: 'NIRNAY AI is reasoning over your business context...', suggested: 'Suggested questions',
-    placeholder: 'Ask about your business, finance, scheme or local market...', listening: 'Listening... speak now', stop: 'Stop',
-    readAloud: 'Read answer aloud', basis: 'Basis', fallbackBasis: 'NIRNAY advisory context',
-    error: 'I could not reach the advisory engine. Please try again or use one of the suggested questions.',
-    prompts: ['Give me a 90-day action plan', 'How should I split my capital?', 'Which schemes should I verify?', 'How do I get my first 20 customers?'],
-  },
-  hi: {
-    title: 'NIRNAY AI से पूछें', voiceFirst: 'आवाज़ + टेक्स्ट', subtitle: 'स्थानीय व्यवसाय, वित्त और योजना सलाहकार',
-    greeting: 'नमस्ते! मैं आपके जिले, कौशल, पूंजी, जमीन, अनुभव और बिज़नेस प्लान के आधार पर अधिक सटीक सलाह दे सकता हूँ। बिज़नेस आइडिया, ग्राहक, कीमत, वित्त, सरकारी योजनाएं, जोखिम, लाइसेंस या 90-दिन की योजना पूछें।',
-    unsupported: 'इस ब्राउज़र में वॉइस इनपुट उपलब्ध नहीं है। आप सवाल टाइप कर सकते हैं।',
-    loading: 'NIRNAY AI आपके बिज़नेस संदर्भ का विश्लेषण कर रहा है...', suggested: 'सुझाए गए सवाल',
-    placeholder: 'व्यवसाय, वित्त, योजना या स्थानीय बाजार के बारे में पूछें...', listening: 'सुन रहा हूँ... अब बोलें', stop: 'रोकें',
-    readAloud: 'उत्तर सुनें', basis: 'आधार', fallbackBasis: 'NIRNAY सलाह संदर्भ',
-    error: 'अभी सलाह इंजन से संपर्क नहीं हो पाया। दोबारा कोशिश करें या सुझाया गया सवाल चुनें।',
-    prompts: ['90 दिन की कार्ययोजना बनाएं', 'मेरी पूंजी कैसे बांटूं?', 'कौन-सी योजनाएं जांचूं?', 'पहले 20 ग्राहक कैसे मिलेंगे?'],
-  },
-  bn: {
-    title: 'NIRNAY AI-কে জিজ্ঞাসা করুন', voiceFirst: 'ভয়েস + টেক্সট', subtitle: 'স্থানীয় ব্যবসা, অর্থায়ন ও স্কিম পরামর্শ',
-    greeting: 'নমস্কার! আপনার জেলা, দক্ষতা, মূলধন, জমি, অভিজ্ঞতা ও ব্যবসার পরিকল্পনা ব্যবহার করে আমি আরও নির্দিষ্ট পরামর্শ দিতে পারি। ব্যবসা, গ্রাহক, মূল্য, ঋণ, স্কিম, ঝুঁকি, লাইসেন্স বা ৯০ দিনের পরিকল্পনা সম্পর্কে জিজ্ঞাসা করুন।',
-    unsupported: 'এই ব্রাউজারে ভয়েস ইনপুট সমর্থিত নয়। আপনি প্রশ্ন টাইপ করতে পারেন।',
-    loading: 'NIRNAY AI আপনার ব্যবসার প্রেক্ষাপট বিশ্লেষণ করছে...', suggested: 'প্রস্তাবিত প্রশ্ন',
-    placeholder: 'ব্যবসা, অর্থায়ন, স্কিম বা স্থানীয় বাজার সম্পর্কে জিজ্ঞাসা করুন...', listening: 'শুনছি... এখন বলুন', stop: 'থামান',
-    readAloud: 'উত্তর শুনুন', basis: 'ভিত্তি', fallbackBasis: 'NIRNAY পরামর্শ প্রসঙ্গ',
-    error: 'এই মুহূর্তে পরামর্শ ইঞ্জিনে পৌঁছানো যায়নি। আবার চেষ্টা করুন।',
-    prompts: ['৯০ দিনের কর্মপরিকল্পনা দিন', 'মূলধন কীভাবে ভাগ করব?', 'কোন স্কিম যাচাই করব?', 'প্রথম ২০ জন গ্রাহক কীভাবে পাব?'],
-  },
-  mr: {
-    title: 'NIRNAY AI ला विचारा', voiceFirst: 'आवाज + मजकूर', subtitle: 'स्थानिक व्यवसाय, वित्त व योजना सल्लागार',
-    greeting: 'नमस्कार! तुमचा जिल्हा, कौशल्य, भांडवल, जमीन, अनुभव आणि व्यवसाय योजना वापरून मी अधिक अचूक सल्ला देऊ शकतो. व्यवसाय, ग्राहक, किंमत, वित्त, योजना, जोखीम, परवाने किंवा 90 दिवसांची योजना विचारा.',
-    unsupported: 'या ब्राउझरमध्ये व्हॉइस इनपुट उपलब्ध नाही. प्रश्न टाइप करू शकता.',
-    loading: 'NIRNAY AI तुमच्या व्यवसाय संदर्भाचा विचार करत आहे...', suggested: 'सुचवलेले प्रश्न',
-    placeholder: 'व्यवसाय, वित्त, योजना किंवा स्थानिक बाजाराबद्दल विचारा...', listening: 'ऐकत आहे... आता बोला', stop: 'थांबा',
-    readAloud: 'उत्तर ऐका', basis: 'आधार', fallbackBasis: 'NIRNAY सल्ला संदर्भ',
-    error: 'सल्ला इंजिनशी संपर्क झाला नाही. पुन्हा प्रयत्न करा.',
-    prompts: ['90 दिवसांची कृती योजना द्या', 'भांडवल कसे विभागू?', 'कोणत्या योजना तपासू?', 'पहिले 20 ग्राहक कसे मिळवू?'],
-  },
-  ta: {
-    title: 'NIRNAY AI-யிடம் கேளுங்கள்', voiceFirst: 'குரல் + உரை', subtitle: 'உள்ளூர் வணிகம், நிதி & திட்ட ஆலோசகர்',
-    greeting: 'வணக்கம்! உங்கள் மாவட்டம், திறன், முதல்தொகை, நிலம், அனுபவம் மற்றும் வணிகத் திட்டத்தை வைத்து மேலும் குறிப்பிட்ட ஆலோசனை வழங்க முடியும். வணிக யோசனை, வாடிக்கையாளர், விலை, நிதி, அரசு திட்டம், ஆபத்து, உரிமம் அல்லது 90 நாள் திட்டம் பற்றி கேளுங்கள்.',
-    unsupported: 'இந்த உலாவியில் குரல் உள்ளீடு கிடைக்கவில்லை. கேள்வியை தட்டச்சு செய்யலாம்.',
-    loading: 'NIRNAY AI உங்கள் வணிக சூழலை ஆய்வு செய்கிறது...', suggested: 'பரிந்துரைக்கப்பட்ட கேள்விகள்',
-    placeholder: 'வணிகம், நிதி, திட்டம் அல்லது உள்ளூர் சந்தை பற்றி கேளுங்கள்...', listening: 'கேட்கிறேன்... இப்போது பேசுங்கள்', stop: 'நிறுத்து',
-    readAloud: 'பதிலை கேட்க', basis: 'அடிப்படை', fallbackBasis: 'NIRNAY ஆலோசனை சூழல்',
-    error: 'ஆலோசனை இயந்திரத்தை அணுக முடியவில்லை. மீண்டும் முயற்சிக்கவும்.',
-    prompts: ['90 நாள் செயல் திட்டம் தரவும்', 'முதல்தொகையை எப்படி பிரிப்பது?', 'எந்த திட்டங்களை சரிபார்ப்பது?', 'முதல் 20 வாடிக்கையாளர்களை எப்படி பெறுவது?'],
-  },
-  te: {
-    title: 'NIRNAY AIని అడగండి', voiceFirst: 'వాయిస్ + టెక్స్ట్', subtitle: 'స్థానిక వ్యాపారం, ఫైనాన్స్ & పథకాల సలహాదారు',
-    greeting: 'నమస్తే! మీ జిల్లా, నైపుణ్యం, మూలధనం, భూమి, అనుభవం మరియు వ్యాపార ప్రణాళిక ఆధారంగా మరింత నిర్దిష్ట సలహా ఇవ్వగలను. వ్యాపారం, కస్టమర్లు, ధర, ఫైనాన్స్, పథకాలు, రిస్క్, లైసెన్సులు లేదా 90 రోజుల ప్రణాళిక గురించి అడగండి.',
-    unsupported: 'ఈ బ్రౌజర్‌లో వాయిస్ ఇన్‌పుట్ అందుబాటులో లేదు. మీరు టైప్ చేయవచ్చు.',
-    loading: 'NIRNAY AI మీ వ్యాపార సందర్భాన్ని విశ్లేషిస్తోంది...', suggested: 'సూచించిన ప్రశ్నలు',
-    placeholder: 'వ్యాపారం, ఫైనాన్స్, పథకం లేదా స్థానిక మార్కెట్ గురించి అడగండి...', listening: 'వింటున్నాను... ఇప్పుడు మాట్లాడండి', stop: 'ఆపు',
-    readAloud: 'సమాధానం వినండి', basis: 'ఆధారం', fallbackBasis: 'NIRNAY సలహా సందర్భం',
-    error: 'సలహా ఇంజిన్‌ను చేరుకోలేకపోయాను. మళ్లీ ప్రయత్నించండి.',
-    prompts: ['90 రోజుల కార్యాచరణ ప్రణాళిక ఇవ్వండి', 'మూలధనాన్ని ఎలా విభజించాలి?', 'ఏ పథకాలు ధృవీకరించాలి?', 'మొదటి 20 కస్టమర్లను ఎలా పొందాలి?'],
-  },
-  kn: {
-    title: 'NIRNAY AI ಅನ್ನು ಕೇಳಿ', voiceFirst: 'ಧ್ವನಿ + ಪಠ್ಯ', subtitle: 'ಸ್ಥಳೀಯ ವ್ಯವಹಾರ, ಹಣಕಾಸು & ಯೋಜನೆ ಸಲಹೆಗಾರ',
-    greeting: 'ನಮಸ್ಕಾರ! ನಿಮ್ಮ ಜಿಲ್ಲೆ, ಕೌಶಲ್ಯ, ಬಂಡವಾಳ, ಭೂಮಿ, ಅನುಭವ ಮತ್ತು ವ್ಯವಹಾರ ಯೋಜನೆಯ ಆಧಾರದಲ್ಲಿ ಹೆಚ್ಚು ನಿರ್ದಿಷ್ಟ ಸಲಹೆ ನೀಡಬಹುದು. ವ್ಯವಹಾರ, ಗ್ರಾಹಕರು, ಬೆಲೆ, ಹಣಕಾಸು, ಯೋಜನೆಗಳು, ಅಪಾಯ, ಪರವಾನಗಿ ಅಥವಾ 90 ದಿನಗಳ ಯೋಜನೆ ಬಗ್ಗೆ ಕೇಳಿ.',
-    unsupported: 'ಈ ಬ್ರೌಸರ್‌ನಲ್ಲಿ ಧ್ವನಿ ಇನ್‌ಪುಟ್ ಲಭ್ಯವಿಲ್ಲ. ಪ್ರಶ್ನೆಯನ್ನು ಟೈಪ್ ಮಾಡಬಹುದು.',
-    loading: 'NIRNAY AI ನಿಮ್ಮ ವ್ಯವಹಾರ ಸಂದರ್ಭವನ್ನು ವಿಶ್ಲೇಷಿಸುತ್ತಿದೆ...', suggested: 'ಸೂಚಿಸಿದ ಪ್ರಶ್ನೆಗಳು',
-    placeholder: 'ವ್ಯವಹಾರ, ಹಣಕಾಸು, ಯೋಜನೆ ಅಥವಾ ಸ್ಥಳೀಯ ಮಾರುಕಟ್ಟೆ ಬಗ್ಗೆ ಕೇಳಿ...', listening: 'ಕೇಳುತ್ತಿದ್ದೇನೆ... ಈಗ ಮಾತನಾಡಿ', stop: 'ನಿಲ್ಲಿಸಿ',
-    readAloud: 'ಉತ್ತರವನ್ನು ಕೇಳಿ', basis: 'ಆಧಾರ', fallbackBasis: 'NIRNAY ಸಲಹೆ ಸಂದರ್ಭ',
-    error: 'ಸಲಹಾ ಎಂಜಿನ್‌ಗೆ ಸಂಪರ್ಕವಾಗಲಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.',
-    prompts: ['90 ದಿನಗಳ ಕಾರ್ಯಯೋಜನೆ ನೀಡಿ', 'ಬಂಡವಾಳವನ್ನು ಹೇಗೆ ಹಂಚಬೇಕು?', 'ಯಾವ ಯೋಜನೆಗಳನ್ನು ಪರಿಶೀಲಿಸಬೇಕು?', 'ಮೊದಲ 20 ಗ್ರಾಹಕರನ್ನು ಹೇಗೆ ಪಡೆಯಬೇಕು?'],
-  },
-  gu: {
-    title: 'NIRNAY AI ને પૂછો', voiceFirst: 'વૉઇસ + ટેક્સ્ટ', subtitle: 'સ્થાનિક બિઝનેસ, ફાઇનાન્સ અને યોજના સલાહકાર',
-    greeting: 'નમસ્તે! તમારા જિલ્લો, કુશળતા, મૂડી, જમીન, અનુભવ અને બિઝનેસ પ્લાનના આધારે હું વધુ ચોક્કસ સલાહ આપી શકું છું. બિઝનેસ, ગ્રાહકો, ભાવ, ફાઇનાન્સ, યોજનાઓ, જોખમ, લાઇસન્સ અથવા 90 દિવસની યોજના વિશે પૂછો.',
-    unsupported: 'આ બ્રાઉઝરમાં વૉઇસ ઇનપુટ ઉપલબ્ધ નથી. તમે પ્રશ્ન ટાઇપ કરી શકો છો.',
-    loading: 'NIRNAY AI તમારા બિઝનેસ સંદર્ભનું વિશ્લેષણ કરી રહ્યું છે...', suggested: 'સૂચવેલા પ્રશ્નો',
-    placeholder: 'બિઝનેસ, ફાઇનાન્સ, યોજના અથવા સ્થાનિક બજાર વિશે પૂછો...', listening: 'સાંભળી રહ્યો છું... હવે બોલો', stop: 'બંધ કરો',
-    readAloud: 'જવાબ સાંભળો', basis: 'આધાર', fallbackBasis: 'NIRNAY સલાહ સંદર્ભ',
-    error: 'સલાહ એન્જિન સુધી પહોંચી શકાયું નથી. ફરી પ્રયત્ન કરો.',
-    prompts: ['90 દિવસની કાર્યયોજના આપો', 'મૂડી કેવી રીતે વહેંચું?', 'કઈ યોજનાઓ ચકાસવી?', 'પહેલા 20 ગ્રાહકો કેવી રીતે મેળવવા?'],
-  },
-  pa: {
-    title: 'NIRNAY AI ਨੂੰ ਪੁੱਛੋ', voiceFirst: 'ਆਵਾਜ਼ + ਟੈਕਸਟ', subtitle: 'ਸਥਾਨਕ ਕਾਰੋਬਾਰ, ਵਿੱਤ ਅਤੇ ਯੋਜਨਾ ਸਲਾਹਕਾਰ',
-    greeting: 'ਸਤ ਸ੍ਰੀ ਅਕਾਲ! ਤੁਹਾਡੇ ਜ਼ਿਲ੍ਹੇ, ਹੁਨਰ, ਪੂੰਜੀ, ਜ਼ਮੀਨ, ਤਜਰਬੇ ਅਤੇ ਕਾਰੋਬਾਰੀ ਯੋਜਨਾ ਦੇ ਆਧਾਰ ਤੇ ਮੈਂ ਹੋਰ ਖਾਸ ਸਲਾਹ ਦੇ ਸਕਦਾ ਹਾਂ। ਕਾਰੋਬਾਰ, ਗਾਹਕ, ਕੀਮਤ, ਵਿੱਤ, ਯੋਜਨਾਵਾਂ, ਖਤਰਾ, ਲਾਇਸੈਂਸ ਜਾਂ 90 ਦਿਨਾਂ ਦੀ ਯੋਜਨਾ ਬਾਰੇ ਪੁੱਛੋ।',
-    unsupported: 'ਇਸ ਬ੍ਰਾਊਜ਼ਰ ਵਿੱਚ ਵੌਇਸ ਇਨਪੁੱਟ ਉਪਲਬਧ ਨਹੀਂ। ਤੁਸੀਂ ਸਵਾਲ ਟਾਈਪ ਕਰ ਸਕਦੇ ਹੋ।',
-    loading: 'NIRNAY AI ਤੁਹਾਡੇ ਕਾਰੋਬਾਰੀ ਸੰਦਰਭ ਦਾ ਵਿਸ਼ਲੇਸ਼ਣ ਕਰ ਰਿਹਾ ਹੈ...', suggested: 'ਸੁਝਾਏ ਸਵਾਲ',
-    placeholder: 'ਕਾਰੋਬਾਰ, ਵਿੱਤ, ਯੋਜਨਾ ਜਾਂ ਸਥਾਨਕ ਮਾਰਕੀਟ ਬਾਰੇ ਪੁੱਛੋ...', listening: 'ਸੁਣ ਰਿਹਾ ਹਾਂ... ਹੁਣ ਬੋਲੋ', stop: 'ਰੋਕੋ',
-    readAloud: 'ਜਵਾਬ ਸੁਣੋ', basis: 'ਆਧਾਰ', fallbackBasis: 'NIRNAY ਸਲਾਹ ਸੰਦਰਭ',
-    error: 'ਸਲਾਹ ਇੰਜਨ ਨਾਲ ਸੰਪਰਕ ਨਹੀਂ ਹੋ ਸਕਿਆ। ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।',
-    prompts: ['90 ਦਿਨਾਂ ਦੀ ਕਾਰਵਾਈ ਯੋਜਨਾ ਦਿਓ', 'ਪੂੰਜੀ ਕਿਵੇਂ ਵੰਡਾਂ?', 'ਕਿਹੜੀਆਂ ਯੋਜਨਾਵਾਂ ਜਾਂਚਾਂ?', 'ਪਹਿਲੇ 20 ਗਾਹਕ ਕਿਵੇਂ ਮਿਲਣਗੇ?'],
-  },
+  en: { title: 'Ask NIRNAY AI', subtitle: 'Multilingual voice + hyper-local business advisor', greeting: 'Namaste! I can speak with you and answer using your district, skill, capital, land, experience and business plan. Ask about customers, pricing, finance, schemes, risks, licences or a 90-day action plan.', unsupported: 'Voice input is not supported in this browser. You can still type your question.', loading: 'NIRNAY AI is analysing your business context...', suggested: 'Suggested questions', placeholder: 'Ask or speak about your business...', listening: 'Listening... speak now', stop: 'Stop', readAloud: 'Play this answer', error: 'I could not reach the advisory engine. Please try again.', voiceOn: 'AI voice ON', voiceOff: 'AI voice OFF', speaking: 'Speaking...', prompts: ['Give me a 90-day action plan', 'How should I split my capital?', 'Which schemes should I verify?', 'How do I get my first 20 customers?'] },
+  hi: { title: 'NIRNAY AI से पूछें', subtitle: 'बहुभाषी वॉइस + हाइपर-लोकल बिज़नेस सलाहकार', greeting: 'नमस्ते! मैं आपसे आवाज़ में बात कर सकता हूँ और आपके जिले, कौशल, पूंजी, जमीन, अनुभव और बिज़नेस प्लान के आधार पर जवाब दे सकता हूँ। ग्राहक, कीमत, वित्त, योजना, जोखिम, लाइसेंस या 90-दिन की योजना पूछें।', unsupported: 'इस ब्राउज़र में वॉइस इनपुट उपलब्ध नहीं है। आप सवाल टाइप कर सकते हैं।', loading: 'NIRNAY AI आपके बिज़नेस संदर्भ का विश्लेषण कर रहा है...', suggested: 'सुझाए गए सवाल', placeholder: 'अपने बिज़नेस के बारे में पूछें या बोलें...', listening: 'सुन रहा हूँ... अब बोलें', stop: 'रोकें', readAloud: 'यह उत्तर सुनें', error: 'अभी सलाह इंजन से संपर्क नहीं हो पाया। दोबारा कोशिश करें।', voiceOn: 'AI आवाज़ चालू', voiceOff: 'AI आवाज़ बंद', speaking: 'जवाब बोल रहा है...', prompts: ['90 दिन की कार्ययोजना बनाएं', 'मेरी पूंजी कैसे बांटूं?', 'कौन-सी योजनाएं जांचूं?', 'पहले 20 ग्राहक कैसे मिलेंगे?'] },
+  bn: { title: 'NIRNAY AI-কে জিজ্ঞাসা করুন', subtitle: 'বহুভাষী ভয়েস + স্থানীয় ব্যবসা পরামর্শ', greeting: 'নমস্কার! আমি আপনার জেলা, দক্ষতা, মূলধন, জমি, অভিজ্ঞতা ও ব্যবসার পরিকল্পনা ব্যবহার করে কণ্ঠে উত্তর দিতে পারি। গ্রাহক, মূল্য, অর্থায়ন, স্কিম, ঝুঁকি, লাইসেন্স বা ৯০ দিনের পরিকল্পনা সম্পর্কে জিজ্ঞাসা করুন।', unsupported: 'এই ব্রাউজারে ভয়েস ইনপুট সমর্থিত নয়। আপনি টাইপ করতে পারেন।', loading: 'NIRNAY AI আপনার ব্যবসার প্রেক্ষাপট বিশ্লেষণ করছে...', suggested: 'প্রস্তাবিত প্রশ্ন', placeholder: 'ব্যবসা সম্পর্কে জিজ্ঞাসা করুন বা বলুন...', listening: 'শুনছি... এখন বলুন', stop: 'থামান', readAloud: 'উত্তর শুনুন', error: 'এই মুহূর্তে পরামর্শ ইঞ্জিনে পৌঁছানো যায়নি। আবার চেষ্টা করুন।', voiceOn: 'AI ভয়েস চালু', voiceOff: 'AI ভয়েস বন্ধ', speaking: 'উত্তর বলা হচ্ছে...', prompts: ['৯০ দিনের পরিকল্পনা দিন', 'মূলধন কীভাবে ভাগ করব?', 'কোন স্কিম যাচাই করব?', 'প্রথম ২০ জন গ্রাহক কীভাবে পাব?'] },
+  mr: { title: 'NIRNAY AI ला विचारा', subtitle: 'बहुभाषिक आवाज + स्थानिक व्यवसाय सल्लागार', greeting: 'नमस्कार! तुमचा जिल्हा, कौशल्य, भांडवल, जमीन, अनुभव आणि व्यवसाय योजना वापरून मी आवाजात उत्तर देऊ शकतो. ग्राहक, किंमत, वित्त, योजना, जोखीम, परवाने किंवा 90 दिवसांची योजना विचारा.', unsupported: 'या ब्राउझरमध्ये व्हॉइस इनपुट उपलब्ध नाही. प्रश्न टाइप करू शकता.', loading: 'NIRNAY AI तुमच्या व्यवसाय संदर्भाचे विश्लेषण करत आहे...', suggested: 'सुचवलेले प्रश्न', placeholder: 'व्यवसायाबद्दल विचारा किंवा बोला...', listening: 'ऐकत आहे... आता बोला', stop: 'थांबा', readAloud: 'उत्तर ऐका', error: 'सल्ला इंजिनशी संपर्क झाला नाही. पुन्हा प्रयत्न करा.', voiceOn: 'AI आवाज सुरू', voiceOff: 'AI आवाज बंद', speaking: 'उत्तर बोलत आहे...', prompts: ['90 दिवसांची कृती योजना द्या', 'भांडवल कसे विभागू?', 'कोणत्या योजना तपासू?', 'पहिले 20 ग्राहक कसे मिळवू?'] },
+  ta: { title: 'NIRNAY AI-யிடம் கேளுங்கள்', subtitle: 'பலமொழி குரல் + உள்ளூர் வணிக ஆலோசகர்', greeting: 'வணக்கம்! உங்கள் மாவட்டம், திறன், முதல்தொகை, நிலம், அனுபவம் மற்றும் வணிகத் திட்டத்தின் அடிப்படையில் குரலில் பதிலளிக்க முடியும். வாடிக்கையாளர், விலை, நிதி, திட்டம், ஆபத்து, உரிமம் அல்லது 90 நாள் திட்டம் பற்றி கேளுங்கள்.', unsupported: 'இந்த உலாவியில் குரல் உள்ளீடு கிடைக்கவில்லை. தட்டச்சு செய்யலாம்.', loading: 'NIRNAY AI உங்கள் வணிக சூழலை ஆய்வு செய்கிறது...', suggested: 'பரிந்துரைக்கப்பட்ட கேள்விகள்', placeholder: 'வணிகம் பற்றி கேளுங்கள் அல்லது பேசுங்கள்...', listening: 'கேட்கிறேன்... இப்போது பேசுங்கள்', stop: 'நிறுத்து', readAloud: 'பதிலை கேளுங்கள்', error: 'ஆலோசனை இயந்திரத்தை அணுக முடியவில்லை. மீண்டும் முயற்சிக்கவும்.', voiceOn: 'AI குரல் இயக்கம்', voiceOff: 'AI குரல் நிறுத்தம்', speaking: 'பதில் பேசப்படுகிறது...', prompts: ['90 நாள் செயல் திட்டம் தரவும்', 'முதல்தொகையை எப்படி பிரிப்பது?', 'எந்த திட்டங்களை சரிபார்ப்பது?', 'முதல் 20 வாடிக்கையாளர்களை எப்படி பெறுவது?'] },
+  te: { title: 'NIRNAY AIని అడగండి', subtitle: 'బహుభాషా వాయిస్ + స్థానిక వ్యాపార సలహాదారు', greeting: 'నమస్తే! మీ జిల్లా, నైపుణ్యం, మూలధనం, భూమి, అనుభవం మరియు వ్యాపార ప్రణాళిక ఆధారంగా వాయిస్‌లో సమాధానం ఇవ్వగలను. కస్టమర్లు, ధర, ఫైనాన్స్, పథకాలు, రిస్క్, లైసెన్సులు లేదా 90 రోజుల ప్రణాళిక గురించి అడగండి.', unsupported: 'ఈ బ్రౌజర్‌లో వాయిస్ ఇన్‌పుట్ అందుబాటులో లేదు. మీరు టైప్ చేయవచ్చు.', loading: 'NIRNAY AI మీ వ్యాపార సందర్భాన్ని విశ్లేషిస్తోంది...', suggested: 'సూచించిన ప్రశ్నలు', placeholder: 'వ్యాపారం గురించి అడగండి లేదా మాట్లాడండి...', listening: 'వింటున్నాను... ఇప్పుడు మాట్లాడండి', stop: 'ఆపు', readAloud: 'సమాధానం వినండి', error: 'సలహా ఇంజిన్‌ను చేరుకోలేకపోయాను. మళ్లీ ప్రయత్నించండి.', voiceOn: 'AI వాయిస్ ఆన్', voiceOff: 'AI వాయిస్ ఆఫ్', speaking: 'సమాధానం చెబుతోంది...', prompts: ['90 రోజుల కార్యాచరణ ప్రణాళిక ఇవ్వండి', 'మూలధనాన్ని ఎలా విభజించాలి?', 'ఏ పథకాలు ధృవీకరించాలి?', 'మొదటి 20 కస్టమర్లను ఎలా పొందాలి?'] },
+  kn: { title: 'NIRNAY AI ಅನ್ನು ಕೇಳಿ', subtitle: 'ಬಹುಭಾಷಾ ಧ್ವನಿ + ಸ್ಥಳೀಯ ವ್ಯವಹಾರ ಸಲಹೆಗಾರ', greeting: 'ನಮಸ್ಕಾರ! ನಿಮ್ಮ ಜಿಲ್ಲೆ, ಕೌಶಲ್ಯ, ಬಂಡವಾಳ, ಭೂಮಿ, ಅನುಭವ ಮತ್ತು ವ್ಯವಹಾರ ಯೋಜನೆಯ ಆಧಾರದಲ್ಲಿ ಧ್ವನಿಯಲ್ಲಿ ಉತ್ತರಿಸಬಹುದು. ಗ್ರಾಹಕರು, ಬೆಲೆ, ಹಣಕಾಸು, ಯೋಜನೆಗಳು, ಅಪಾಯ, ಪರವಾನಗಿ ಅಥವಾ 90 ದಿನಗಳ ಯೋಜನೆ ಬಗ್ಗೆ ಕೇಳಿ.', unsupported: 'ಈ ಬ್ರೌಸರ್‌ನಲ್ಲಿ ಧ್ವನಿ ಇನ್‌ಪುಟ್ ಲಭ್ಯವಿಲ್ಲ. ಟೈಪ್ ಮಾಡಬಹುದು.', loading: 'NIRNAY AI ನಿಮ್ಮ ವ್ಯವಹಾರ ಸಂದರ್ಭವನ್ನು ವಿಶ್ಲೇಷಿಸುತ್ತಿದೆ...', suggested: 'ಸೂಚಿಸಿದ ಪ್ರಶ್ನೆಗಳು', placeholder: 'ವ್ಯವಹಾರ ಬಗ್ಗೆ ಕೇಳಿ ಅಥವಾ ಮಾತನಾಡಿ...', listening: 'ಕೇಳುತ್ತಿದ್ದೇನೆ... ಈಗ ಮಾತನಾಡಿ', stop: 'ನಿಲ್ಲಿಸಿ', readAloud: 'ಉತ್ತರ ಕೇಳಿ', error: 'ಸಲಹಾ ಎಂಜಿನ್‌ಗೆ ಸಂಪರ್ಕವಾಗಲಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.', voiceOn: 'AI ಧ್ವನಿ ಆನ್', voiceOff: 'AI ಧ್ವನಿ ಆಫ್', speaking: 'ಉತ್ತರ ಮಾತನಾಡುತ್ತಿದೆ...', prompts: ['90 ದಿನಗಳ ಕಾರ್ಯಯೋಜನೆ ನೀಡಿ', 'ಬಂಡವಾಳವನ್ನು ಹೇಗೆ ಹಂಚಬೇಕು?', 'ಯಾವ ಯೋಜನೆಗಳನ್ನು ಪರಿಶೀಲಿಸಬೇಕು?', 'ಮೊದಲ 20 ಗ್ರಾಹಕರನ್ನು ಹೇಗೆ ಪಡೆಯಬೇಕು?'] },
+  gu: { title: 'NIRNAY AI ને પૂછો', subtitle: 'બહુભાષી અવાજ + સ્થાનિક બિઝનેસ સલાહકાર', greeting: 'નમસ્તે! તમારા જિલ્લો, કુશળતા, મૂડી, જમીન, અનુભવ અને બિઝનેસ પ્લાનના આધારે હું અવાજમાં જવાબ આપી શકું છું. ગ્રાહકો, ભાવ, ફાઇનાન્સ, યોજનાઓ, જોખમ, લાઇસન્સ અથવા 90 દિવસની યોજના વિશે પૂછો.', unsupported: 'આ બ્રાઉઝરમાં વૉઇસ ઇનપુટ ઉપલબ્ધ નથી. તમે ટાઇપ કરી શકો છો.', loading: 'NIRNAY AI તમારા બિઝનેસ સંદર્ભનું વિશ્લેષણ કરી રહ્યું છે...', suggested: 'સૂચવેલા પ્રશ્નો', placeholder: 'બિઝનેસ વિશે પૂછો અથવા બોલો...', listening: 'સાંભળી રહ્યો છું... હવે બોલો', stop: 'બંધ કરો', readAloud: 'જવાબ સાંભળો', error: 'સલાહ એન્જિન સુધી પહોંચી શકાયું નથી. ફરી પ્રયત્ન કરો.', voiceOn: 'AI અવાજ ચાલુ', voiceOff: 'AI અવાજ બંધ', speaking: 'જવાબ બોલાઈ રહ્યો છે...', prompts: ['90 દિવસની કાર્યયોજના આપો', 'મૂડી કેવી રીતે વહેંચું?', 'કઈ યોજનાઓ ચકાસવી?', 'પહેલા 20 ગ્રાહકો કેવી રીતે મેળવવા?'] },
+  pa: { title: 'NIRNAY AI ਨੂੰ ਪੁੱਛੋ', subtitle: 'ਬਹੁਭਾਸ਼ੀ ਆਵਾਜ਼ + ਸਥਾਨਕ ਕਾਰੋਬਾਰ ਸਲਾਹਕਾਰ', greeting: 'ਸਤ ਸ੍ਰੀ ਅਕਾਲ! ਤੁਹਾਡੇ ਜ਼ਿਲ੍ਹੇ, ਹੁਨਰ, ਪੂੰਜੀ, ਜ਼ਮੀਨ, ਤਜਰਬੇ ਅਤੇ ਕਾਰੋਬਾਰੀ ਯੋਜਨਾ ਦੇ ਆਧਾਰ ਤੇ ਮੈਂ ਆਵਾਜ਼ ਵਿੱਚ ਜਵਾਬ ਦੇ ਸਕਦਾ ਹਾਂ। ਗਾਹਕ, ਕੀਮਤ, ਵਿੱਤ, ਯੋਜਨਾ, ਖਤਰਾ, ਲਾਇਸੈਂਸ ਜਾਂ 90 ਦਿਨਾਂ ਦੀ ਯੋਜਨਾ ਬਾਰੇ ਪੁੱਛੋ।', unsupported: 'ਇਸ ਬ੍ਰਾਊਜ਼ਰ ਵਿੱਚ ਵੌਇਸ ਇਨਪੁਟ ਉਪਲਬਧ ਨਹੀਂ। ਤੁਸੀਂ ਟਾਈਪ ਕਰ ਸਕਦੇ ਹੋ।', loading: 'NIRNAY AI ਤੁਹਾਡੇ ਕਾਰੋਬਾਰੀ ਸੰਦਰਭ ਦਾ ਵਿਸ਼ਲੇਸ਼ਣ ਕਰ ਰਿਹਾ ਹੈ...', suggested: 'ਸੁਝਾਏ ਸਵਾਲ', placeholder: 'ਕਾਰੋਬਾਰ ਬਾਰੇ ਪੁੱਛੋ ਜਾਂ ਬੋਲੋ...', listening: 'ਸੁਣ ਰਿਹਾ ਹਾਂ... ਹੁਣ ਬੋਲੋ', stop: 'ਰੋਕੋ', readAloud: 'ਜਵਾਬ ਸੁਣੋ', error: 'ਸਲਾਹ ਇੰਜਨ ਨਾਲ ਸੰਪਰਕ ਨਹੀਂ ਹੋ ਸਕਿਆ। ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।', voiceOn: 'AI ਆਵਾਜ਼ ਚਾਲੂ', voiceOff: 'AI ਆਵਾਜ਼ ਬੰਦ', speaking: 'ਜਵਾਬ ਬੋਲਿਆ ਜਾ ਰਿਹਾ ਹੈ...', prompts: ['90 ਦਿਨਾਂ ਦੀ ਕਾਰਵਾਈ ਯੋਜਨਾ ਦਿਓ', 'ਪੂੰਜੀ ਕਿਵੇਂ ਵੰਡਾਂ?', 'ਕਿਹੜੀਆਂ ਯੋਜਨਾਵਾਂ ਜਾਂਚਾਂ?', 'ਪਹਿਲੇ 20 ਗਾਹਕ ਕਿਵੇਂ ਮਿਲਣਗੇ?'] },
 };
 
 function normalizeLanguage(value?: string): LanguageCode {
   return value && value in UI_COPY ? (value as LanguageCode) : 'en';
+}
+
+function pickVoice(language: LanguageCode) {
+  if (!('speechSynthesis' in window)) return undefined;
+  const voices = window.speechSynthesis.getVoices();
+  const locale = SPEECH_LOCALES[language].toLowerCase();
+  const base = locale.split('-')[0];
+  return (
+    voices.find((voice) => voice.lang.toLowerCase() === locale) ||
+    voices.find((voice) => voice.lang.toLowerCase().startsWith(`${base}-`)) ||
+    voices.find((voice) => voice.lang.toLowerCase() === base)
+  );
 }
 
 export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({ isOpen, onClose, context }) => {
@@ -154,6 +78,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({ isOpen
   const previousContextRef = useRef('');
   const recognitionRef = useRef<any>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const lastAutoSpokenRef = useRef(-1);
 
   const greeting = useMemo<Message>(() => ({
     role: 'assistant',
@@ -167,15 +92,47 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({ isOpen
   const [isListening, setIsListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [autoSpeak, setAutoSpeak] = useState(true);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+
+  const speakText = (text: string) => {
+    if (!('speechSynthesis' in window) || !text.trim()) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = SPEECH_LOCALES[language];
+    utterance.rate = 0.92;
+    utterance.pitch = 1;
+    const voice = pickVoice(language);
+    if (voice) utterance.voice = voice;
+    utterance.onstart = () => setIsSpeaking(true);
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    window.speechSynthesis.speak(utterance);
+  };
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+      return;
+    }
     if (previousContextRef.current !== contextSignature) {
       setMessages([greeting]);
       setSuggestedPrompts(copy.prompts);
       previousContextRef.current = contextSignature;
+      lastAutoSpokenRef.current = -1;
     }
   }, [isOpen, contextSignature, greeting, copy.prompts]);
+
+  useEffect(() => {
+    if (!isOpen || !autoSpeak || !messages.length) return;
+    const index = messages.length - 1;
+    const latest = messages[index];
+    if (latest.role !== 'assistant' || lastAutoSpokenRef.current === index) return;
+    lastAutoSpokenRef.current = index;
+    const timer = window.setTimeout(() => speakText(latest.text), 120);
+    return () => window.clearTimeout(timer);
+  }, [messages, autoSpeak, isOpen, language]);
 
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -183,7 +140,6 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({ isOpen
       setSpeechSupported(false);
       return;
     }
-
     setSpeechSupported(true);
     const recognition = new SpeechRecognition();
     recognition.continuous = false;
@@ -191,15 +147,12 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({ isOpen
     recognition.lang = SPEECH_LOCALES[language];
     recognition.onresult = (event: any) => {
       if (!event?.results) return;
-      const transcript = Array.from(event.results)
-        .map((result: any) => result?.[0]?.transcript || '')
-        .join('');
+      const transcript = Array.from(event.results).map((result: any) => result?.[0]?.transcript || '').join('');
       setInputText(transcript);
     };
     recognition.onerror = () => setIsListening(false);
     recognition.onend = () => setIsListening(false);
     recognitionRef.current = recognition;
-
     return () => {
       try { recognition.abort(); } catch { /* browser-specific */ }
     };
@@ -218,7 +171,8 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({ isOpen
       setIsListening(false);
       return;
     }
-
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    setIsSpeaking(false);
     setInputText('');
     try {
       recognitionRef.current.start();
@@ -232,28 +186,19 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({ isOpen
     const query = (textToSend || inputText).trim();
     if (!query || isLoading) return;
 
-    if (isListening && recognitionRef.current) {
-      recognitionRef.current.stop();
-      setIsListening(false);
-    }
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    setIsSpeaking(false);
+    if (isListening && recognitionRef.current) recognitionRef.current.stop();
+    setIsListening(false);
 
-    const history: ChatHistoryMessage[] = messages.slice(-10).map((message) => ({
-      role: message.role,
-      text: message.text,
-    }));
-
+    const history: ChatHistoryMessage[] = messages.slice(-10).map((message) => ({ role: message.role, text: message.text }));
     setMessages((prev) => [...prev, { role: 'user', text: query }]);
     setInputText('');
     setIsLoading(true);
 
     try {
       const response = await askNirnayQuestion(query, { ...context, language }, history);
-      setMessages((prev) => [...prev, {
-        role: 'assistant',
-        text: response.answer,
-        sources: response.sources,
-        confidenceNote: response.confidenceNote,
-      }]);
+      setMessages((prev) => [...prev, { role: 'assistant', text: response.answer, sources: response.sources, confidenceNote: response.confidenceNote }]);
       if (response.followUps?.length) setSuggestedPrompts(response.followUps.slice(0, 4));
     } catch {
       setMessages((prev) => [...prev, { role: 'assistant', text: copy.error }]);
@@ -262,66 +207,73 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({ isOpen
     }
   };
 
-  const speakText = (text: string) => {
-    if (!('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = SPEECH_LOCALES[language];
-    utterance.rate = 0.92;
-    window.speechSynthesis.speak(utterance);
+  const toggleAutoSpeak = () => {
+    setAutoSpeak((value) => {
+      const next = !value;
+      if (!next && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        setIsSpeaking(false);
+      }
+      return next;
+    });
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#2B1B16]/50 p-4 backdrop-blur-xs animate-in fade-in">
-      <div className="flex max-h-[88vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-[#D9B99B]/60 bg-white shadow-xl">
-        <div className="flex items-center justify-between bg-[#4A2F24] px-5 py-4 text-white">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#B9825B] text-sm font-extrabold text-white shadow-xs">N</div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#2B1B16]/55 p-4 backdrop-blur-sm animate-in fade-in">
+      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-[28px] border border-[#D9B99B]/60 bg-white shadow-[0_30px_100px_rgba(43,27,22,.28)]">
+        <div className="flex items-center justify-between bg-[linear-gradient(135deg,#3C251D,#6B4535)] px-5 py-4 text-white">
+          <div className="flex items-center gap-3">
+            <div className={`relative flex h-10 w-10 items-center justify-center rounded-full bg-[#B9825B] text-sm font-extrabold shadow-inner ${isSpeaking ? 'ring-4 ring-[#EBC8A8]/30' : ''}`}>
+              N
+              {isSpeaking && <span className="absolute inset-0 animate-ping rounded-full border border-[#F3E8DC]/50" />}
+            </div>
             <div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-base font-bold leading-none text-white">{copy.title}</h3>
-                <span className="rounded bg-white/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#F3E8DC]">{copy.voiceFirst}</span>
+                <span className="rounded-full bg-white/15 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-[#F3E8DC]">Voice AI</span>
               </div>
-              <span className="text-[11px] text-[#D9B99B]">{copy.subtitle}</span>
+              <span className="mt-1 block text-[11px] text-[#E6CDB7]">{copy.subtitle}</span>
             </div>
           </div>
-          <button onClick={onClose} className="rounded-lg p-1 text-[#D9B99B] transition-colors hover:bg-white/10 hover:text-white" aria-label="Close chatbot">
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={toggleAutoSpeak} title={autoSpeak ? copy.voiceOn : copy.voiceOff} className={`flex items-center gap-1.5 rounded-xl px-2.5 py-2 text-[10px] font-extrabold transition ${autoSpeak ? 'bg-emerald-500/20 text-emerald-100 ring-1 ring-emerald-300/25' : 'bg-white/10 text-[#E6CDB7]'}`}>
+              {autoSpeak ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+              <span className="hidden sm:inline">{autoSpeak ? copy.voiceOn : copy.voiceOff}</span>
+            </button>
+            <button onClick={onClose} className="rounded-xl p-2 text-[#E6CDB7] transition hover:bg-white/10 hover:text-white" aria-label="Close chatbot">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
-        <div className="flex flex-wrap gap-1.5 border-b border-[#D9B99B]/40 bg-[#FFFDF8] px-4 py-2">
-          {context.district && <span className="rounded-full bg-[#F3E8DC] px-2 py-1 text-[10px] font-bold text-[#6B4535]">{context.district}</span>}
-          {context.skill && <span className="rounded-full bg-[#EEF0E3] px-2 py-1 text-[10px] font-bold text-[#56603F]">{context.skill}</span>}
-          {context.margin ? <span className="rounded-full bg-[#FAF0E5] px-2 py-1 text-[10px] font-bold text-[#8B5E47]">₹{context.margin.toLocaleString('en-IN')}</span> : null}
-          {context.experience && <span className="rounded-full bg-[#F4F0EA] px-2 py-1 text-[10px] font-bold text-[#6B4535]">{context.experience}</span>}
+        <div className="flex flex-wrap gap-1.5 border-b border-[#D9B99B]/40 bg-[#FFFDF8] px-4 py-2.5">
+          {context.district && <span className="rounded-full bg-[#F3E8DC] px-2.5 py-1 text-[10px] font-bold text-[#6B4535]">{context.district}</span>}
+          {context.skill && <span className="rounded-full bg-[#EEF0E3] px-2.5 py-1 text-[10px] font-bold text-[#56603F]">{context.skill}</span>}
+          {context.margin ? <span className="rounded-full bg-[#FAF0E5] px-2.5 py-1 text-[10px] font-bold text-[#8B5E47]">₹{context.margin.toLocaleString('en-IN')}</span> : null}
+          {context.experience && <span className="rounded-full bg-[#F4F0EA] px-2.5 py-1 text-[10px] font-bold text-[#6B4535]">{context.experience}</span>}
+          {isSpeaking && <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-extrabold text-emerald-800"><Sparkles className="h-3 w-3 animate-pulse" />{copy.speaking}</span>}
         </div>
 
         {!speechSupported && (
           <div className="flex items-center gap-1.5 border-b border-amber-500/20 bg-amber-500/10 px-4 py-2 text-[11px] text-amber-900">
-            <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-700" />
-            <span>{copy.unsupported}</span>
+            <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-700" /><span>{copy.unsupported}</span>
           </div>
         )}
 
-        <div className="flex-1 space-y-3.5 overflow-y-auto bg-[#FAF7F3] p-4 text-xs">
+        <div className="flex-1 space-y-3.5 overflow-y-auto bg-[radial-gradient(circle_at_top,#FFFDF8_0,#FAF7F3_55%,#F4ECE2_100%)] p-4 text-xs">
           {messages.map((message, index) => (
             <div key={`${message.role}-${index}`} className={`flex flex-col ${message.role === 'user' ? 'items-end' : 'items-start'}`}>
-              <div className={`max-w-[90%] rounded-2xl p-3.5 leading-relaxed whitespace-pre-line ${message.role === 'user' ? 'rounded-br-xs bg-[#6B4535] text-white' : 'rounded-bl-xs border border-[#D9B99B]/50 bg-white text-[#2B1B16] shadow-xs'}`}>
+              <div className={`max-w-[90%] rounded-2xl p-3.5 leading-relaxed whitespace-pre-line ${message.role === 'user' ? 'rounded-br-sm bg-[#6B4535] text-white shadow-sm' : 'rounded-bl-sm border border-[#D9B99B]/50 bg-white text-[#2B1B16] shadow-[0_8px_24px_rgba(75,48,35,.06)]'}`}>
                 {message.text}
                 {message.role === 'assistant' && (
                   <div className="mt-2.5 flex items-end justify-between gap-2 border-t border-[#F3E8DC] pt-2">
-                    <div className="min-w-0">
-                      <span className="block text-[10px] italic text-[#8B5E47]">
-                        {copy.basis}: {message.sources?.length ? message.sources.join(' · ') : copy.fallbackBasis}
-                      </span>
-                      {message.confidenceNote && <span className="mt-0.5 block text-[10px] text-[#8B5E47]">{message.confidenceNote}</span>}
+                    <div className="min-w-0 text-[10px] text-[#8B5E47]">
+                      {message.sources?.length ? message.sources.join(' · ') : 'NIRNAY AI advisory context'}
+                      {message.confidenceNote && <span className="mt-0.5 block">{message.confidenceNote}</span>}
                     </div>
-                    {'speechSynthesis' in window && (
-                      <button onClick={() => speakText(message.text)} title={copy.readAloud} className="shrink-0 rounded p-1 text-[#8B5E47] transition-colors hover:bg-[#FAF7F3] hover:text-[#2B1B16]">
-                        <Volume2 className="h-3.5 w-3.5" />
-                      </button>
-                    )}
+                    <button onClick={() => speakText(message.text)} title={copy.readAloud} className="shrink-0 rounded-lg border border-[#E8D9C8] bg-[#FFFDF8] p-1.5 text-[#8B5E47] transition hover:bg-[#F3E8DC] hover:text-[#2B1B16]">
+                      <Volume2 className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 )}
               </div>
@@ -329,9 +281,8 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({ isOpen
           ))}
 
           {isLoading && (
-            <div className="flex w-fit items-center gap-2 rounded-xl border border-[#D9B99B]/40 bg-white/70 p-2 text-xs text-[#8B5E47]">
-              <Sparkles className="h-3.5 w-3.5 animate-spin text-[#6B4535]" />
-              <span>{copy.loading}</span>
+            <div className="flex w-fit items-center gap-2 rounded-xl border border-[#D9B99B]/40 bg-white/90 p-2.5 text-xs text-[#8B5E47] shadow-sm">
+              <Sparkles className="h-3.5 w-3.5 animate-spin text-[#6B4535]" /><span>{copy.loading}</span>
             </div>
           )}
           <div ref={chatEndRef} />
@@ -341,7 +292,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({ isOpen
           <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#8B5E47]">{copy.suggested}</span>
           <div className="flex flex-wrap gap-1.5">
             {suggestedPrompts.map((prompt) => (
-              <button key={prompt} onClick={() => void handleSendMessage(prompt)} disabled={isLoading} className="rounded-full border border-[#D9B99B]/60 bg-[#FAF7F3] px-2.5 py-1 text-left text-[11px] text-[#4A2F24] transition-colors hover:bg-[#F3E8DC] disabled:opacity-50">
+              <button key={prompt} onClick={() => void handleSendMessage(prompt)} disabled={isLoading} className="rounded-full border border-[#D9B99B]/60 bg-[#FAF7F3] px-2.5 py-1.5 text-left text-[11px] text-[#4A2F24] transition hover:-translate-y-0.5 hover:bg-[#F3E8DC] disabled:opacity-50">
                 {prompt}
               </button>
             ))}
@@ -350,7 +301,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({ isOpen
 
         <div className="space-y-2 border-t border-[#D9B99B]/40 bg-white p-3.5">
           {isListening && (
-            <div className="flex items-center justify-between rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs text-red-700 animate-pulse">
+            <div className="flex items-center justify-between rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-700 animate-pulse">
               <span className="flex items-center gap-1.5 font-bold"><span className="h-2 w-2 rounded-full bg-red-600 animate-ping" />{copy.listening}</span>
               <button onClick={toggleListening} className="text-[11px] font-extrabold underline hover:text-red-900">{copy.stop}</button>
             </div>
@@ -358,12 +309,12 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({ isOpen
 
           <form onSubmit={(event) => { event.preventDefault(); void handleSendMessage(); }} className="flex items-center gap-2">
             {speechSupported && (
-              <button type="button" onClick={toggleListening} className={`rounded-xl border p-2.5 transition-all ${isListening ? 'border-red-700 bg-red-600 text-white ring-2 ring-red-300' : 'border-[#D9B99B] bg-[#FAF7F3] text-[#6B4535] hover:bg-[#F3E8DC]'}`}>
+              <button type="button" onClick={toggleListening} className={`rounded-xl border p-3 transition-all ${isListening ? 'border-red-700 bg-red-600 text-white ring-4 ring-red-300/30' : 'border-[#D9B99B] bg-[#FAF7F3] text-[#6B4535] hover:bg-[#F3E8DC]'}`}>
                 {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
               </button>
             )}
-            <input type="text" value={inputText} onChange={(event) => setInputText(event.target.value)} placeholder={copy.placeholder} disabled={isLoading} className="flex-1 rounded-xl border border-[#D9B99B]/60 bg-[#FAF7F3] px-3.5 py-2 text-xs text-[#2B1B16] focus:outline-hidden focus:ring-1 focus:ring-[#6B4535]" />
-            <button type="submit" disabled={!inputText.trim() || isLoading} className="rounded-xl bg-[#4A2F24] p-2.5 text-white transition-colors hover:bg-[#2B1B16] disabled:opacity-40">
+            <input type="text" value={inputText} onChange={(event) => setInputText(event.target.value)} placeholder={copy.placeholder} disabled={isLoading} className="flex-1 rounded-xl border border-[#D9B99B]/60 bg-[#FAF7F3] px-3.5 py-3 text-xs text-[#2B1B16] focus:outline-hidden focus:ring-2 focus:ring-[#B9825B]/30" />
+            <button type="submit" disabled={!inputText.trim() || isLoading} className="rounded-xl bg-[#4A2F24] p-3 text-white transition hover:bg-[#2B1B16] disabled:opacity-40">
               <Send className="h-4 w-4" />
             </button>
           </form>
