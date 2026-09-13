@@ -102,12 +102,18 @@ export default function App() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
   const financialData: FinancialStructureData = useMemo(() => {
-    return calculateFinancialStructure(formData.availableMargin || formData.marginCapital || 50000);
-  }, [formData.availableMargin, formData.marginCapital]);
+    return calculateFinancialStructure(
+      formData.availableMargin || formData.marginCapital || 50000,
+      formData.category
+    );
+  }, [formData.availableMargin, formData.marginCapital, formData.category]);
 
   const growthData: GrowthProjectionData = useMemo(() => {
-    return generateGrowthProjections(formData.availableMargin || formData.marginCapital || 50000);
-  }, [formData.availableMargin, formData.marginCapital]);
+    return generateGrowthProjections(
+      formData.availableMargin || formData.marginCapital || 50000,
+      formData.category
+    );
+  }, [formData.availableMargin, formData.marginCapital, formData.category]);
 
   useEffect(() => {
     let active = true;
@@ -174,11 +180,12 @@ export default function App() {
       setIsAiGenerated(result.isAiGenerated);
 
       const calculatedFinance = calculateFinancialStructure(
-        newForm.availableMargin || newForm.marginCapital || 50000
+        newForm.availableMargin || newForm.marginCapital || 50000,
+        newForm.category
       );
-      void saveAssessmentBundle(newForm, result, calculatedFinance);
-    } catch {
-      // aiService contains its own fallback behavior.
+      await saveAssessmentBundle({ ...newForm, preferredLanguage: language }, result, calculatedFinance);
+    } catch (error) {
+      console.warn('Assessment completed, but a background AI/save step reported an error:', error);
     } finally {
       setIsAnalyzing(false);
     }
