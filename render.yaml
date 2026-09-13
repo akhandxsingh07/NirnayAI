@@ -17,6 +17,10 @@ services:
         sync: false
       - key: DATA_GOV_IN_API_KEY
         sync: false
+      - key: ADMIN_LOGIN_ID
+        value: nirnay-admin
+      - key: ADMIN_LOGIN_EMAIL
+        sync: false
       - key: SUPABASE_URL
         value: https://nllkmunqdkznhnhfrric.supabase.co
       - key: SUPABASE_PUBLISHABLE_KEY
