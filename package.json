@@ -1,7 +1,7 @@
 {
-  "name": "react-example",
+  "name": "nirnay-ai",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "engines": {
     "node": ">=20 <23",
@@ -9,10 +9,10 @@
   },
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
-    "start": "node dist/server.cjs",
-    "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
+    "build": "npm run clean && vite build --outDir dist/client && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist-server/server.cjs",
+    "start": "node dist-server/server.cjs",
+    "preview": "vite preview --outDir dist/client",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true});require('fs').rmSync('dist-server',{recursive:true,force:true})\"",
     "lint": "tsc --noEmit",
     "deploy:check": "npm run lint && npm run build"
   },
