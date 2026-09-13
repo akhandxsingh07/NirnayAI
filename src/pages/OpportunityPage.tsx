@@ -1,6 +1,6 @@
 import React from 'react';
 import { AssessmentFormData, LocalOpportunityData, PageId, LanguageCode } from '../types';
-import { LocalMapVisualization } from '../components/LocalMapVisualization';
+import { LiveMarketMap } from '../components/LiveMarketMap';
 import { EvidenceBadge, EvidenceLegendBar } from '../components/EvidenceBadge';
 import { t } from '../services/localizationService';
 import {
@@ -9,9 +9,7 @@ import {
   Users2,
   AlertTriangle,
   Compass,
-  Layers,
   ArrowRight,
-  Sparkles,
   ShoppingBag,
 } from 'lucide-react';
 
@@ -32,7 +30,6 @@ export const OpportunityPage: React.FC<OpportunityPageProps> = ({
 
   return (
     <div className="space-y-8 py-2">
-      {/* Page Header */}
       <div className="bg-white rounded-3xl border border-[#D9B99B]/40 p-6 sm:p-8 shadow-xs flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
@@ -57,29 +54,21 @@ export const OpportunityPage: React.FC<OpportunityPageProps> = ({
         </button>
       </div>
 
-      {/* Interactive Map Section */}
       <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold text-[#2B1B16] uppercase tracking-wider">
-            Hyper-Local Geospatial Intelligence
-          </h2>
-          <EvidenceBadge type="INDICATIVE" />
-        </div>
-        <LocalMapVisualization
-          markers={opportunityData?.markers || []}
-          userLocationName={formData?.location?.village || 'Your Location'}
-          radiusKm={opportunityData?.radiusKm || 10}
+        <LiveMarketMap
+          district={formData.location.district}
+          state={formData.location.state}
+          category={formData.category}
+          language={language}
         />
       </section>
 
-      {/* 5 Core Market Opportunity Modules with Explicit Evidence Badges */}
       <section className="space-y-4">
         <h2 className="text-sm font-bold text-[#2B1B16] uppercase tracking-wider">
           Market Intelligence Breakdown
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {/* Card 1: Market Demand Signal */}
           <div className="bg-white rounded-2xl border border-[#D9B99B]/40 p-5 shadow-xs space-y-3 flex flex-col justify-between">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -94,11 +83,10 @@ export const OpportunityPage: React.FC<OpportunityPageProps> = ({
               </p>
             </div>
             <div className="pt-2 border-t border-[#F3E8DC] text-[11px] text-[#8B5E47]">
-              Source: Local trade surveys & household consumption patterns.
+              Source: local assessment model; verify demand with customer interviews and test sales.
             </div>
           </div>
 
-          {/* Card 2: Competitor Density */}
           <div className="bg-white rounded-2xl border border-[#D9B99B]/40 p-5 shadow-xs space-y-3 flex flex-col justify-between">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -109,15 +97,14 @@ export const OpportunityPage: React.FC<OpportunityPageProps> = ({
               </div>
               <h3 className="text-sm font-bold text-[#2B1B16]">Competitor Density</h3>
               <p className="text-xs text-[#4A2F24] leading-relaxed">
-                {opportunityData?.competitorDensity || opportunityData?.competition || '2 informal collection points within 4 km, no chilling infrastructure'}
+                {opportunityData?.competitorDensity || opportunityData?.competition || 'Use the live map above to inspect mapped competitors, then verify informal businesses locally.'}
               </p>
             </div>
             <div className="pt-2 border-t border-[#F3E8DC] text-[11px] text-[#8B5E47]">
-              Field verification needed with village Sarpanch & market traders.
+              Live map coverage and informal-market reality can differ; field verification remains important.
             </div>
           </div>
 
-          {/* Card 3: Market Gap */}
           <div className="bg-white rounded-2xl border border-[#D9B99B]/40 p-5 shadow-xs space-y-3 flex flex-col justify-between">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -128,15 +115,14 @@ export const OpportunityPage: React.FC<OpportunityPageProps> = ({
               </div>
               <h3 className="text-sm font-bold text-[#2B1B16]">Unmet Market Gap</h3>
               <p className="text-xs text-[#4A2F24] leading-relaxed">
-                {opportunityData?.marketGap || 'Limited organized availability of tested, packaged goods within 5–10 km radius.'}
+                {opportunityData?.marketGap || 'Limited organized availability or service consistency may create a local gap to validate.'}
               </p>
             </div>
             <div className="pt-2 border-t border-[#F3E8DC] text-[11px] text-[#8B5E47]">
-              Synthesized opportunity based on dairy cold-chain absence.
+              AI inference should be validated with mapped places, customer interviews and local supplier checks.
             </div>
           </div>
 
-          {/* Card 4: Recommended Operating Radius */}
           <div className="bg-white rounded-2xl border border-[#D9B99B]/40 p-5 shadow-xs space-y-3 flex flex-col justify-between">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -151,11 +137,10 @@ export const OpportunityPage: React.FC<OpportunityPageProps> = ({
               </p>
             </div>
             <div className="pt-2 border-t border-[#F3E8DC] text-[11px] text-[#8B5E47]">
-              Optimizes logistics cost for perishable product handling.
+              Adjust the live map between 5 km and 10 km to compare market reach and competition.
             </div>
           </div>
 
-          {/* Card 5: Suggested Product / Service Mix */}
           <div className="md:col-span-2 bg-white rounded-2xl border border-[#D9B99B]/40 p-5 shadow-xs space-y-3 flex flex-col justify-between">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -164,13 +149,12 @@ export const OpportunityPage: React.FC<OpportunityPageProps> = ({
                 </div>
                 <EvidenceBadge type="AI_INFERENCE" />
               </div>
-              <h3 className="text-sm font-bold text-[#2B1B16]">Suggested High-Margin Product Mix</h3>
+              <h3 className="text-sm font-bold text-[#2B1B16]">Suggested Product / Service Mix</h3>
               <div className="flex flex-wrap gap-2 pt-1">
                 {(opportunityData?.suggestedProductMix || [
-                  'Chilled Pouch Milk (Cow & Buffalo)',
-                  'Fresh Malai Paneer (200g/500g)',
-                  'Set Curd / Dahi',
-                  'Desi Ghee (Tin/Glass Pack)',
+                  'Core high-frequency offer',
+                  'Value-added secondary offer',
+                  'Bulk institutional package',
                 ]).map((item, idx) => (
                   <span
                     key={idx}
@@ -182,13 +166,12 @@ export const OpportunityPage: React.FC<OpportunityPageProps> = ({
               </div>
             </div>
             <p className="text-[11px] text-[#8B5E47] pt-2 border-t border-[#F3E8DC]">
-              Value-added products (e.g. Paneer and Curd) yield 25–40% higher gross margin than unprocessed raw milk.
+              Compare this AI-suggested mix with the live competitor and customer-hub map before investing.
             </p>
           </div>
         </div>
       </section>
 
-      {/* Global Legend Bar */}
       <EvidenceLegendBar />
     </div>
   );
