@@ -180,17 +180,36 @@ export interface EMIResult {
 }
 
 export interface GrowthDataPoint {
-  month: string;
+  month: number;
+  label: string;
   revenue: number;
   expenses: number;
   profit: number;
+  repayment: number;
+  cashFlow: number;
 }
 
 export interface GrowthProjectionData {
+  monthlyData: GrowthDataPoint[];
   projectedMonthlyRevenue: number;
-  projectedMonthlyExpenses: number;
   projectedMonthlyProfit: number;
   breakEvenMonths: number;
-  monthlyGrowthRate: number;
-  projection: GrowthDataPoint[];
+  loanRepaymentMonthly: number;
+  isIndicative: boolean;
+}
+
+export interface BusinessPlanReport {
+  generatedAt: string;
+  businessIdea: string;
+  category: BusinessCategory;
+  location: LocationData;
+  opportunitySummary: string;
+  feasibilityScore: number;
+  feasibilityLabel: string;
+  financialStructure: FinancialPlanData;
+  recommendedScheme: SchemeOption;
+  monthlyEMI: number;
+  keyRisks: string[];
+  mitigations: string[];
+  nextSteps: string[];
 }
