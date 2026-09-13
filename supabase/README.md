@@ -2,7 +2,7 @@
 
 Project ref: `nllkmunqdkznhnhfrric` (Mumbai / `ap-south-1`).
 
-The production backend uses Supabase Auth + PostgreSQL with Row Level Security (RLS), while the existing Express server continues to handle protected Gemini AI endpoints.
+The production backend uses Supabase Auth + PostgreSQL with Row Level Security (RLS). Express handles protected Gemini endpoints, live-data proxying and the server-side single-admin ID mapping.
 
 ## Core tables
 
@@ -19,27 +19,36 @@ The production backend uses Supabase Auth + PostgreSQL with Row Level Security (
 
 - Every authenticated user receives a `profiles` row automatically.
 - RLS limits citizens to their own data.
-- Admin access is checked in PostgreSQL rather than by browser-visible credentials.
+- Admin access is checked in PostgreSQL, not granted by browser-visible state.
 - A private single-row admin allowlist controls which email may receive the `admin` role.
-- A partial unique index allows only one `profiles.role = 'admin'` row in the entire project.
-- Citizens cannot promote themselves because their profile update policy requires their role to remain `citizen`.
-- Internal `SECURITY DEFINER` helper functions live in the private schema and are not executable from the public API.
+- A partial unique index allows only one `profiles.role = 'admin'` row in the project.
+- Citizens cannot promote themselves.
+- Internal `SECURITY DEFINER` helper functions live in the private schema and are not exposed as public browser functions.
 
 ## Citizen authentication
 
 - Email uses Supabase passwordless email authentication.
 - Phone uses Supabase 6-digit SMS OTP.
-- Phone login requires an SMS provider configured in Supabase Auth (Twilio, Vonage, MessageBird, etc.).
+- Phone login requires an SMS provider configured in Supabase Auth.
 
-## Single administrator
+## Single administrator: Admin ID + password
 
-The authorised administrator email is stored only in the private database allowlist, not in frontend code or public environment variables.
+The Admin Portal now accepts one configured Admin ID and the password of the single authorised Supabase admin account.
 
-When the allowlisted email signs in for the first time, the Auth trigger creates its profile with `role = 'admin'`. All other accounts are created as citizens. The database rejects assigning a second admin.
+Server configuration:
+
+```env
+ADMIN_LOGIN_ID=nirnay-admin
+ADMIN_LOGIN_EMAIL=YOUR_AUTHORISED_ADMIN_EMAIL
+```
+
+The admin password is **not** stored in GitHub, frontend code or `.env`. Supabase Auth stores and verifies it. The Express server maps the Admin ID to `ADMIN_LOGIN_EMAIL`, signs in through Supabase Auth, then verifies that the resulting profile still has `role = 'admin'` before returning a session.
+
+This means changing a browser value cannot create an admin. PostgreSQL RLS + the private allowlist remain authoritative, and the database still rejects assigning a second admin.
 
 ## Automated backend workflow
 
-When a new assessment is saved, PostgreSQL automatically creates five action-plan tasks for that user:
+When a new assessment is saved, PostgreSQL automatically creates five action-plan tasks:
 
 1. Complete Udyam registration
 2. Validate demand with local customers
@@ -47,7 +56,7 @@ When a new assessment is saved, PostgreSQL automatically creates five action-pla
 4. Prepare identity, bank and scheme documents
 5. Schedule a financing discussion with the selected lender
 
-The database also records important events such as citizen registration, assessment creation, AI analysis creation, financial-plan creation and report creation in `admin_activity`. Task completion timestamps are maintained automatically.
+The database also records citizen registration, assessment creation, AI analysis creation, financial-plan creation and report creation in `admin_activity`. Task completion timestamps are maintained automatically.
 
 ## Local setup
 
@@ -58,12 +67,17 @@ npm install
 npm run dev
 ```
 
-The app contains publishable Supabase defaults, but they can be overridden with:
+Create a local `.env` (never commit it):
 
 ```env
+GEMINI_API_KEY=your_server_side_gemini_key
+DATA_GOV_IN_API_KEY=your_data_gov_key
+ADMIN_LOGIN_ID=nirnay-admin
+ADMIN_LOGIN_EMAIL=your_authorised_admin_email
+SUPABASE_URL=https://nllkmunqdkznhnhfrric.supabase.co
+SUPABASE_PUBLISHABLE_KEY=your_publishable_key
 VITE_SUPABASE_URL=https://nllkmunqdkznhnhfrric.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=your_publishable_key
-GEMINI_API_KEY=your_server_side_gemini_key
 ```
 
-Never put a Supabase service-role key in `VITE_*` variables or frontend code.
+Never put a Supabase service-role key, Gemini secret, data.gov.in secret or admin password in `VITE_*` variables or frontend code.
