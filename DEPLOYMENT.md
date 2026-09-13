@@ -1,6 +1,6 @@
 # NirnayAI Deployment Guide
 
-NirnayAI is a single Node.js web service: Vite builds the React frontend, Express serves the production frontend and API routes, Supabase provides authentication/database, and Gemini powers online AI features.
+NirnayAI is a single Node.js web service: Vite builds the React frontend, Express serves the production frontend and API routes, Supabase provides authentication/database, Gemini powers online AI features, Open-Meteo supplies live forecast signals, OpenStreetMap/Overpass supplies live mapped-place intelligence, and the optional India OGD connector supplies official daily AGMARKNET mandi records.
 
 ## Recommended: Render Blueprint
 
@@ -12,7 +12,8 @@ The repository includes `render.yaml`.
    - Start: `npm start`
    - Health check: `/api/health`
 3. Add the secret environment variable `GEMINI_API_KEY` in the Render dashboard. Never commit this key.
-4. Deploy and copy the final HTTPS application URL.
+4. Optional but recommended for agriculture/food demos: add `DATA_GOV_IN_API_KEY` from data.gov.in. This enables official daily mandi price records from the AGMARKNET dataset. Keep it server-side and never use a `VITE_` prefix.
+5. Deploy and copy the final HTTPS application URL.
 
 The Supabase URL and publishable key are public client configuration and are already included in the blueprint. Do not add a Supabase service-role key to the frontend or repository.
 
@@ -31,6 +32,20 @@ If mobile OTP is going to be exposed to users, configure a supported SMS provide
 ## Email delivery
 
 Custom SMTP must remain configured in Supabase Auth. The sender address must remain verified with the SMTP provider. Test one fresh citizen magic-link login from the production domain after deployment.
+
+## Live data feeds
+
+No secret is required for the Open-Meteo forecast integration. Live map intelligence continues to use OpenStreetMap/Nominatim/Overpass with short server-side caching.
+
+The official mandi integration uses the Government of India OGD resource for current daily mandi prices. Configure:
+
+```env
+DATA_GOV_IN_API_KEY=YOUR_DATA_GOV_IN_KEY
+```
+
+If this key is absent, NirnayAI still runs normally: weather and live map signals remain available and the UI clearly marks the mandi connector as not configured instead of fabricating prices.
+
+Government-scheme eligibility is intentionally not scraped. The UI links users to the official myScheme portal for current verification because scheme eligibility, deadlines and implementing-agency rules can change.
 
 ## Production checks
 
@@ -51,8 +66,11 @@ Then verify:
 5. Ask NIRNAY answers in the selected website language.
 6. AI voice plays in the selected language; browser speech fallback works if Gemini TTS is unavailable.
 7. Live map analysis loads and clearly labels OpenStreetMap data as decision support.
-8. Admin login is accepted only for the database-authorized admin account.
-9. Sign-out clears the user session.
+8. Live Weather loads on the Local Opportunity page and shows current/3-day forecast values.
+9. With `DATA_GOV_IN_API_KEY` configured, official daily mandi records load; without it, the UI shows a setup state rather than sample prices.
+10. The government-scheme card links to the official myScheme verification portal.
+11. Admin login is accepted only for the database-authorized admin account.
+12. Sign-out clears the user session.
 
 ## Docker deployment
 
@@ -64,6 +82,7 @@ Build and run:
 docker build -t nirnay-ai .
 docker run --rm -p 3000:3000 \
   -e GEMINI_API_KEY="YOUR_SECRET_KEY" \
+  -e DATA_GOV_IN_API_KEY="YOUR_DATA_GOV_IN_KEY" \
   -e SUPABASE_URL="https://nllkmunqdkznhnhfrric.supabase.co" \
   -e SUPABASE_PUBLISHABLE_KEY="YOUR_PUBLISHABLE_KEY" \
   -e VITE_SUPABASE_URL="https://nllkmunqdkznhnhfrric.supabase.co" \
@@ -78,6 +97,7 @@ Note: Vite `VITE_*` values are embedded during the frontend build. On platforms 
 Never commit or expose:
 
 - `GEMINI_API_KEY`
+- `DATA_GOV_IN_API_KEY`
 - Supabase service-role key
 - SMTP password/API key
 - SMS provider secret
