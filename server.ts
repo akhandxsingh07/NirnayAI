@@ -101,15 +101,27 @@ app.post('/api/ai/analyze', async (req, res) => {
   const formData = req.body;
 
   try {
-    const prompt = `You are NIRNAY AI, an expert rural business advisory and financial structuring engine for India (Smart India Hackathon 2026 Problem Statement SIH26091).
-Analyze the following proposed rural/semi-urban micro-enterprise:
-Location: ${formData.location?.village}, ${formData.location?.block}, ${formData.location?.district} (${formData.location?.state})
+    const prompt = `You are NIRNAY AI, an expert rural and semi-urban micro-enterprise advisory and financial structuring engine for India (Smart India Hackathon 2026 Problem Statement SIH26091).
+
+Analyze the proposed enterprise using the entrepreneur's actual resources, selected skill and exact district context.
+Location: ${formData.location?.village || 'Not specified'}, ${formData.location?.block || 'Not specified'}, ${formData.location?.district || 'Not specified'} (${formData.location?.state || 'Not specified'})
 Category: ${formData.category}
 Idea: ${formData.businessIdea || formData.ideaText}
-Margin Capital Available: ₹${formData.availableMargin || formData.marginCapital}
-Target Customers: ${formData.targetMarket}
-Prior Experience: ${formData.priorExperience}
-Risk Tolerance: ${formData.riskWillingness}
+Selected expertise / skill: ${formData.selectedExpertise || 'Not specified'}
+Prior experience: ${formData.priorExperience || 'Not specified'}
+Available land: ${formData.availableLandAcres ?? 'Not specified'} acres
+Margin capital available: ₹${formData.availableMargin || formData.marginCapital}
+Target customers / local route: ${formData.targetMarket || 'Not specified'}
+Risk tolerance: ${formData.riskWillingness || 'Not specified'}
+Preferred language code: ${formData.preferredLanguage || 'en'}
+
+Important reasoning rules:
+1. Make the answer materially different for the selected district. A Lucknow answer should not read like a Barabanki answer.
+2. Consider urban density, rural/peri-urban character, likely customer channels, supply access, local service demand and the entrepreneur's skill. Do not invent precise official statistics.
+3. If local evidence is uncertain, use qualitative wording and explicitly recommend local verification rather than fabricating numbers.
+4. Give concrete, practical, skill-specific advice: customer route, operating model, product/service mix, and first steps.
+5. Government scheme discussion must never imply guaranteed eligibility, subsidy, sanction or return.
+6. Keep all user-facing string values in the language represented by preferred language code. JSON property names must stay exactly as specified below.
 
 Return valid JSON only with this schema:
 {
@@ -122,22 +134,24 @@ Return valid JSON only with this schema:
     "operationalFeasibility": number,
     "growthPotential": number
   },
-  "recommendation": "string",
+  "recommendation": "string: 3-5 detailed sentences covering skill fit, district fit, launch approach and one key caution",
   "swot": {
-    "strengths": ["string"],
-    "weaknesses": ["string"],
-    "opportunities": ["string"],
-    "threats": ["string"]
+    "strengths": ["string", "string", "string"],
+    "weaknesses": ["string", "string", "string"],
+    "opportunities": ["string", "string", "string"],
+    "threats": ["string", "string", "string"]
   },
   "insights": [
+    {"title": "string", "description": "string", "tag": "string"},
+    {"title": "string", "description": "string", "tag": "string"},
     {"title": "string", "description": "string", "tag": "string"}
   ],
   "localOpportunity": {
-    "demandSignal": "string",
-    "competitorDensity": "string",
-    "marketGap": "string",
+    "demandSignal": "string: district-specific qualitative demand signal",
+    "competitorDensity": "string: qualitative only unless verified data exists",
+    "marketGap": "string: district-specific gap to validate locally",
     "recommendedRadius": "string",
-    "suggestedProductMix": ["string"]
+    "suggestedProductMix": ["string", "string", "string", "string"]
   }
 }`;
 
@@ -178,7 +192,7 @@ Language: ${context?.language || 'en'}
 
 User Question: "${question}"
 
-Reply in plain, practical language under 120 words. Keep financial figures internally consistent and avoid claiming guaranteed approvals or returns.`;
+Reply in the requested language using plain, practical language under 150 words. Keep financial figures internally consistent and avoid claiming guaranteed approvals or returns.`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
