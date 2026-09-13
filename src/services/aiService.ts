@@ -4,13 +4,12 @@ import {
   SWOTData,
   LocalOpportunityData,
   BusinessCategory,
+  LanguageCode,
 } from '../types';
 import {
-  DEMO_FEASIBILITY_SCORE,
-  DEMO_SWOT,
-  DEMO_AI_INSIGHTS,
   DEMO_LOCAL_OPPORTUNITY,
 } from '../utils/demoData';
+import { supabase } from '../lib/supabase';
 
 export interface AIAnalysisResponse {
   feasibilityScore: FeasibilityScoreData;
@@ -21,50 +20,146 @@ export interface AIAnalysisResponse {
   isAiGenerated: boolean;
 }
 
-export async function analyzeBusinessWithAI(
-  formData: AssessmentFormData
-): Promise<AIAnalysisResponse> {
+type LocalCopy = {
+  status: string;
+  recommendation: string;
+  strengthSkill: string;
+  strengthCapital: string;
+  weaknessValidate: string;
+  opportunityDistrict: string;
+  threatCompetition: string;
+  insightMarketTitle: string;
+  insightMarketText: string;
+  insightPilotTitle: string;
+  insightPilotText: string;
+  insightCashTitle: string;
+  insightCashText: string;
+  demand: string;
+  gap: string;
+  competition: string;
+  radius: string;
+  primaryProduct: string;
+  secondaryProduct: string;
+  institutional: string;
+};
+
+const FALLBACK_COPY: Record<LanguageCode, LocalCopy> = {
+  en: {
+    status: 'Promising — validate locally and scale in stages',
+    recommendation: 'Your {business} plan in {district} fits your {skill} background and available resources. Start with the local route already identified for this district: {route}. Keep the first setup deliberately small, validate repeat demand, then expand capacity. Verify licences, current scheme eligibility and supplier pricing before committing the full capital.',
+    strengthSkill: 'The selected skill directly supports day-to-day execution.',
+    strengthCapital: 'Available capital can support a controlled pilot instead of an oversized launch.',
+    weaknessValidate: 'Local demand and competitor pricing still need field validation.',
+    opportunityDistrict: 'The selected district offers a distinct customer route that can be tested before expansion.',
+    threatCompetition: 'Established local sellers may respond on price, convenience or credit.',
+    insightMarketTitle: 'Validate the district route first',
+    insightMarketText: 'Speak to likely buyers in the selected district and secure early orders before major fixed-cost spending.',
+    insightPilotTitle: 'Launch as a measured pilot',
+    insightPilotText: 'Use the smallest workable equipment and inventory setup for the first 30–45 days.',
+    insightCashTitle: 'Protect working capital',
+    insightCashText: 'Keep a cash buffer for delayed sales, repairs, raw-material swings and customer credit.',
+    demand: '{business} has a plausible local demand route in {district}, but exact demand should be verified through customer interviews and test sales.',
+    gap: 'A possible gap is reliable quality, faster service or more organized delivery compared with informal alternatives in {district}.',
+    competition: 'Qualitative: likely mixed; verify nearby organized and informal competitors before launch.',
+    radius: 'Start with a 3–8 km test cluster, then widen only after repeat demand.',
+    primaryProduct: 'Core high-frequency offer', secondaryProduct: 'Value-added secondary offer', institutional: 'Bulk / institutional package',
+  },
+  hi: {
+    status: 'संभावनाशील — स्थानीय सत्यापन के बाद चरणबद्ध विस्तार करें',
+    recommendation: '{district} में आपका {business} प्लान आपके {skill} कौशल और उपलब्ध संसाधनों से मेल खाता है। इस जिले के लिए पहचाने गए स्थानीय मार्ग से शुरुआत करें: {route}। पहला सेटअप छोटा रखें, दोहराई मांग जांचें और फिर क्षमता बढ़ाएं। पूरी पूंजी लगाने से पहले लाइसेंस, वर्तमान योजना पात्रता और सप्लायर कीमतें जांचें।',
+    strengthSkill: 'चुना गया कौशल रोजमर्रा के संचालन में सीधे मदद करता है।', strengthCapital: 'उपलब्ध पूंजी नियंत्रित पायलट के लिए पर्याप्त आधार देती है।', weaknessValidate: 'स्थानीय मांग और प्रतियोगी कीमतों का मैदान में सत्यापन अभी बाकी है।', opportunityDistrict: 'चुना गया जिला विस्तार से पहले जांचने योग्य अलग ग्राहक मार्ग देता है।', threatCompetition: 'स्थानीय स्थापित विक्रेता कीमत, सुविधा या उधार से मुकाबला कर सकते हैं।', insightMarketTitle: 'पहले जिला बाजार मार्ग जांचें', insightMarketText: 'बड़े स्थायी खर्च से पहले संभावित खरीदारों से बात करें और शुरुआती ऑर्डर लें।', insightPilotTitle: 'नियंत्रित पायलट से शुरू करें', insightPilotText: 'पहले 30–45 दिनों में न्यूनतम व्यवहारिक उपकरण और स्टॉक रखें।', insightCashTitle: 'वर्किंग कैपिटल बचाएं', insightCashText: 'धीमी बिक्री, रिपेयर, कच्चे माल की कीमत और ग्राहक उधार के लिए कैश बफर रखें।', demand: '{district} में {business} के लिए संभावित स्थानीय मांग मार्ग है, लेकिन ग्राहक इंटरव्यू और टेस्ट बिक्री से सत्यापन जरूरी है।', gap: '{district} में अनौपचारिक विकल्पों की तुलना में भरोसेमंद गुणवत्ता, तेज सेवा या व्यवस्थित डिलीवरी एक संभावित गैप हो सकता है।', competition: 'गुणात्मक: मिश्रित रहने की संभावना; लॉन्च से पहले नजदीकी संगठित और अनौपचारिक प्रतियोगियों की जांच करें।', radius: '3–8 किमी के टेस्ट क्लस्टर से शुरू करें और दोहराई मांग पर ही विस्तार करें।', primaryProduct: 'मुख्य तेज-बिक्री ऑफर', secondaryProduct: 'वैल्यू-एडेड सेकेंडरी ऑफर', institutional: 'बल्क / संस्थागत पैकेज',
+  },
+  bn: {
+    status: 'সম্ভাবনাময় — স্থানীয় যাচাই করে ধাপে ধাপে বাড়ান',
+    recommendation: '{district}-এ আপনার {business} পরিকল্পনা আপনার {skill} দক্ষতা ও সম্পদের সঙ্গে মানানসই। জেলার জন্য নির্ধারিত স্থানীয় পথ দিয়ে শুরু করুন: {route}। প্রথম সেটআপ ছোট রাখুন, পুনরাবৃত্ত চাহিদা যাচাই করুন, তারপর ক্ষমতা বাড়ান। পুরো মূলধন দেওয়ার আগে লাইসেন্স, স্কিম যোগ্যতা ও সরবরাহকারীর দাম যাচাই করুন।',
+    strengthSkill: 'নির্বাচিত দক্ষতা দৈনন্দিন পরিচালনায় সরাসরি সহায়তা করে।', strengthCapital: 'উপলব্ধ মূলধন নিয়ন্ত্রিত পাইলটের জন্য ভালো ভিত্তি দেয়।', weaknessValidate: 'স্থানীয় চাহিদা ও প্রতিযোগীর দাম মাঠে যাচাই করা বাকি।', opportunityDistrict: 'নির্বাচিত জেলা বিস্তারের আগে পরীক্ষাযোগ্য আলাদা গ্রাহক পথ দেয়।', threatCompetition: 'স্থানীয় প্রতিষ্ঠিত বিক্রেতারা দাম, সুবিধা বা ক্রেডিট দিয়ে প্রতিযোগিতা করতে পারে।', insightMarketTitle: 'আগে জেলা বাজার পথ যাচাই করুন', insightMarketText: 'বড় স্থায়ী খরচের আগে সম্ভাব্য ক্রেতাদের সাথে কথা বলে প্রাথমিক অর্ডার নিন।', insightPilotTitle: 'পরিমিত পাইলট দিয়ে শুরু করুন', insightPilotText: 'প্রথম ৩০–৪৫ দিনে সর্বনিম্ন কার্যকর সরঞ্জাম ও স্টক রাখুন।', insightCashTitle: 'ওয়ার্কিং ক্যাপিটাল রক্ষা করুন', insightCashText: 'ধীর বিক্রি, মেরামত, কাঁচামালের দাম ও গ্রাহক ক্রেডিটের জন্য নগদ বাফার রাখুন।', demand: '{district}-এ {business}-এর সম্ভাব্য স্থানীয় চাহিদা পথ আছে, তবে গ্রাহক সাক্ষাৎকার ও টেস্ট বিক্রিতে যাচাই দরকার।', gap: '{district}-এ অনানুষ্ঠানিক বিকল্পের তুলনায় নির্ভরযোগ্য মান, দ্রুত সেবা বা সংগঠিত ডেলিভারি সম্ভাব্য ফাঁক।', competition: 'গুণগতভাবে মিশ্র হতে পারে; লঞ্চের আগে কাছাকাছি প্রতিযোগী যাচাই করুন।', radius: '৩–৮ কিমি টেস্ট ক্লাস্টার দিয়ে শুরু করে পুনরাবৃত্ত চাহিদায় বিস্তৃত করুন।', primaryProduct: 'মূল উচ্চ-চাহিদা অফার', secondaryProduct: 'ভ্যালু-অ্যাডেড দ্বিতীয় অফার', institutional: 'বাল্ক / প্রাতিষ্ঠানিক প্যাকেজ',
+  },
+  mr: {
+    status: 'आशादायक — स्थानिक पडताळणीनंतर टप्प्याटप्प्याने वाढवा',
+    recommendation: '{district} मधील तुमचा {business} प्लॅन तुमच्या {skill} कौशल्य आणि उपलब्ध साधनांशी जुळतो. जिल्ह्यासाठी ठरवलेल्या स्थानिक मार्गाने सुरुवात करा: {route}. पहिला सेटअप लहान ठेवा, पुनरावृत्ती मागणी तपासा आणि मग क्षमता वाढवा. पूर्ण भांडवल गुंतवण्यापूर्वी परवाने, योजना पात्रता आणि पुरवठादार किंमती तपासा.',
+    strengthSkill: 'निवडलेले कौशल्य रोजच्या कामकाजाला थेट मदत करते.', strengthCapital: 'उपलब्ध भांडवल नियंत्रित पायलटसाठी चांगला आधार देते.', weaknessValidate: 'स्थानिक मागणी व स्पर्धक किंमतींची क्षेत्रीय पडताळणी आवश्यक आहे.', opportunityDistrict: 'निवडलेला जिल्हा विस्तारापूर्वी तपासता येईल असा वेगळा ग्राहक मार्ग देतो.', threatCompetition: 'स्थानिक विक्रेते किंमत, सोय किंवा उधारीवर स्पर्धा करू शकतात.', insightMarketTitle: 'प्रथम जिल्हा बाजार मार्ग तपासा', insightMarketText: 'मोठ्या स्थिर खर्चापूर्वी संभाव्य ग्राहकांशी बोलून सुरुवातीचे ऑर्डर मिळवा.', insightPilotTitle: 'मोजक्या पायलटने सुरुवात करा', insightPilotText: 'पहिल्या 30–45 दिवसांत किमान आवश्यक उपकरणे आणि स्टॉक ठेवा.', insightCashTitle: 'वर्किंग कॅपिटल जपा', insightCashText: 'मंद विक्री, दुरुस्ती, कच्चा माल आणि उधारीसाठी रोख राखीव ठेवा.', demand: '{district} मध्ये {business} साठी संभाव्य स्थानिक मागणी मार्ग आहे; ग्राहक मुलाखती व टेस्ट विक्रीने पडताळा करा.', gap: '{district} मध्ये अनौपचारिक पर्यायांपेक्षा विश्वासार्ह गुणवत्ता, जलद सेवा किंवा व्यवस्थित डिलिव्हरी हा संभाव्य गॅप आहे.', competition: 'गुणात्मकदृष्ट्या मिश्र; लॉन्चपूर्वी जवळचे स्पर्धक तपासा.', radius: '3–8 किमी टेस्ट क्लस्टरपासून सुरुवात करा आणि पुनरावृत्ती मागणीनंतर वाढवा.', primaryProduct: 'मुख्य जलद-विक्री ऑफर', secondaryProduct: 'मूल्यवर्धित दुय्यम ऑफर', institutional: 'बल्क / संस्थात्मक पॅकेज',
+  },
+  ta: {
+    status: 'நம்பிக்கையளிக்கும் — உள்ளூர் சரிபார்ப்புடன் கட்டப்படியாக வளர்க்கவும்',
+    recommendation: '{district} இல் உங்கள் {business} திட்டம் உங்கள் {skill} திறன் மற்றும் வளங்களுடன் பொருந்துகிறது. மாவட்டத்திற்கான உள்ளூர் பாதையுடன் தொடங்குங்கள்: {route}. முதல் அமைப்பை சிறியதாக வைத்துக் கொண்டு மீண்டும் வரும் தேவையை சரிபார்த்து பின்னர் விரிவுபடுத்துங்கள். முழு முதலீட்டுக்கு முன் உரிமங்கள், திட்ட தகுதி மற்றும் சப்ளையர் விலைகளை சரிபார்க்கவும்.',
+    strengthSkill: 'தேர்ந்தெடுத்த திறன் தினசரி செயல்பாட்டை நேரடியாக ஆதரிக்கிறது.', strengthCapital: 'கிடைக்கும் முதல்தொகை கட்டுப்படுத்தப்பட்ட பைலட்டுக்கு நல்ல அடிப்படை.', weaknessValidate: 'உள்ளூர் தேவை மற்றும் போட்டியாளர் விலை களத்தில் சரிபார்க்கப்பட வேண்டும்.', opportunityDistrict: 'தேர்ந்தெடுத்த மாவட்டம் விரிவாக்கத்திற்கு முன் சோதிக்கக்கூடிய தனிப்பட்ட வாடிக்கையாளர் பாதை தருகிறது.', threatCompetition: 'உள்ளூர் விற்பனையாளர்கள் விலை, வசதி அல்லது கடன் மூலம் போட்டியிடலாம்.', insightMarketTitle: 'மாவட்ட சந்தை பாதையை முதலில் சரிபார்க்கவும்', insightMarketText: 'பெரிய நிலையான செலவுக்கு முன் வாங்குபவர்களுடன் பேசி ஆரம்ப ஆர்டர்களை பெறுங்கள்.', insightPilotTitle: 'கட்டுப்படுத்தப்பட்ட பைலட்டுடன் தொடங்குங்கள்', insightPilotText: 'முதல் 30–45 நாட்களுக்கு குறைந்தபட்ச செயல்பாட்டு உபகரணம் மற்றும் ஸ்டாக் போதும்.', insightCashTitle: 'சுழற்சி முதல்தொகையை பாதுகாக்கவும்', insightCashText: 'மெதுவான விற்பனை, பழுது, மூலப்பொருள் விலை மற்றும் கடனுக்காக பண கையிருப்பு வைத்திருங்கள்.', demand: '{district} இல் {business}க்கு சாத்தியமான உள்ளூர் தேவை பாதை உள்ளது; வாடிக்கையாளர் பேட்டி மற்றும் சோதனை விற்பனையால் உறுதி செய்யவும்.', gap: '{district} இல் நம்பகமான தரம், வேகமான சேவை அல்லது ஒழுங்கான விநியோகம் ஒரு சாத்தியமான இடைவெளி.', competition: 'தரநிலை அடிப்படையில் கலப்பு; தொடங்குவதற்கு முன் அருகிலுள்ள போட்டியாளர்களை சரிபார்க்கவும்.', radius: '3–8 கிமீ சோதனை கிளஸ்டரில் தொடங்கி மீண்டும் வரும் தேவைக்கு பிறகு விரிவுபடுத்தவும்.', primaryProduct: 'முக்கிய அதிக-அடிக்கடி ஆஃபர்', secondaryProduct: 'மதிப்பு கூட்டிய இரண்டாம் ஆஃபர்', institutional: 'மொத்த / நிறுவன தொகுப்பு',
+  },
+  te: {
+    status: 'ఆశాజనకం — స్థానిక ధృవీకరణతో దశలవారీగా విస్తరించండి',
+    recommendation: '{district}లో మీ {business} ప్లాన్ మీ {skill} నైపుణ్యం మరియు వనరులకు సరిపోతుంది. జిల్లాకు గుర్తించిన స్థానిక మార్గంతో ప్రారంభించండి: {route}. మొదటి సెటప్ చిన్నగా ఉంచి పునరావృత డిమాండ్‌ను పరీక్షించి తరువాత సామర్థ్యం పెంచండి. పూర్తి పెట్టుబడి ముందు లైసెన్సులు, పథకం అర్హత మరియు సరఫరాదారు ధరలను ధృవీకరించండి.',
+    strengthSkill: 'ఎంచుకున్న నైపుణ్యం రోజువారీ నిర్వహణకు నేరుగా సహాయం చేస్తుంది.', strengthCapital: 'అందుబాటులో మూలధనం నియంత్రిత పైలట్‌కు మంచి ఆధారం.', weaknessValidate: 'స్థానిక డిమాండ్ మరియు పోటీ ధరలు క్షేత్రస్థాయిలో ధృవీకరించాలి.', opportunityDistrict: 'ఎంచుకున్న జిల్లా విస్తరణకు ముందు పరీక్షించగల ప్రత్యేక కస్టమర్ మార్గం ఇస్తుంది.', threatCompetition: 'స్థానిక విక్రేతలు ధర, సౌలభ్యం లేదా క్రెడిట్‌తో పోటీ చేయవచ్చు.', insightMarketTitle: 'ముందుగా జిల్లా మార్కెట్ మార్గాన్ని ధృవీకరించండి', insightMarketText: 'పెద్ద స్థిర ఖర్చు ముందు సంభావ్య కొనుగోలుదారులతో మాట్లాడి ప్రారంభ ఆర్డర్లు పొందండి.', insightPilotTitle: 'నియంత్రిత పైలట్‌తో ప్రారంభించండి', insightPilotText: 'మొదటి 30–45 రోజుల్లో కనీస అవసరమైన పరికరాలు మరియు స్టాక్‌తో ప్రారంభించండి.', insightCashTitle: 'వర్కింగ్ క్యాపిటల్‌ను కాపాడండి', insightCashText: 'నెమ్మదైన అమ్మకాలు, రిపేర్, ముడి సరుకు ధరలు మరియు క్రెడిట్ కోసం నగదు బఫర్ ఉంచండి.', demand: '{district}లో {business}కు సాధ్యమైన స్థానిక డిమాండ్ మార్గం ఉంది; కస్టమర్ ఇంటర్వ్యూలు మరియు టెస్ట్ సేల్స్‌తో ధృవీకరించండి.', gap: '{district}లో నమ్మదగిన నాణ్యత, వేగవంతమైన సేవ లేదా క్రమబద్ధమైన డెలివరీ ఒక సాధ్యమైన గ్యాప్.', competition: 'గుణాత్మకంగా మిశ్రమం; ప్రారంభానికి ముందు సమీప పోటీదారులను పరిశీలించండి.', radius: '3–8 కి.మీ టెస్ట్ క్లస్టర్‌తో ప్రారంభించి పునరావృత డిమాండ్ తరువాత విస్తరించండి.', primaryProduct: 'ప్రధాన అధిక-ఫ్రీక్వెన్సీ ఆఫర్', secondaryProduct: 'విలువ జోడించిన రెండవ ఆఫర్', institutional: 'బల్క్ / సంస్థాగత ప్యాకేజ్',
+  },
+  kn: {
+    status: 'ಆಶಾದಾಯಕ — ಸ್ಥಳೀಯ ಪರಿಶೀಲನೆಯೊಂದಿಗೆ ಹಂತ ಹಂತವಾಗಿ ವಿಸ್ತರಿಸಿ',
+    recommendation: '{district}ದಲ್ಲಿ ನಿಮ್ಮ {business} ಯೋಜನೆ ನಿಮ್ಮ {skill} ಕೌಶಲ್ಯ ಮತ್ತು ಸಂಪನ್ಮೂಲಗಳಿಗೆ ಹೊಂದುತ್ತದೆ. ಜಿಲ್ಲೆಗೆ ಗುರುತಿಸಿದ ಸ್ಥಳೀಯ ಮಾರ್ಗದಿಂದ ಪ್ರಾರಂಭಿಸಿ: {route}. ಮೊದಲ ಸೆಟಪ್ ಚಿಕ್ಕದಾಗಿ ಇಟ್ಟು ಮರುಬೇಡಿಕೆ ಪರೀಕ್ಷಿಸಿ ನಂತರ ಸಾಮರ್ಥ್ಯ ಹೆಚ್ಚಿಸಿ. ಪೂರ್ಣ ಬಂಡವಾಳ ಮೊದಲು ಪರವಾನಗಿ, ಯೋಜನೆ ಅರ್ಹತೆ ಮತ್ತು ಸರಬರಾಜುದಾರ ಬೆಲೆ ಪರಿಶೀಲಿಸಿ.',
+    strengthSkill: 'ಆಯ್ಕೆಮಾಡಿದ ಕೌಶಲ್ಯ ದಿನನಿತ್ಯದ ಕಾರ್ಯಾಚರಣೆಗೆ ನೇರವಾಗಿ ಸಹಾಯ ಮಾಡುತ್ತದೆ.', strengthCapital: 'ಲಭ್ಯ ಬಂಡವಾಳ ನಿಯಂತ್ರಿತ ಪೈಲಟ್‌ಗೆ ಉತ್ತಮ ಆಧಾರ.', weaknessValidate: 'ಸ್ಥಳೀಯ ಬೇಡಿಕೆ ಮತ್ತು ಸ್ಪರ್ಧಿ ಬೆಲೆಗಳನ್ನು ಕ್ಷೇತ್ರದಲ್ಲಿ ಪರಿಶೀಲಿಸಬೇಕು.', opportunityDistrict: 'ಆಯ್ಕೆಮಾಡಿದ ಜಿಲ್ಲೆ ವಿಸ್ತರಣೆಗೆ ಮೊದಲು ಪರೀಕ್ಷಿಸಬಹುದಾದ ವಿಭಿನ್ನ ಗ್ರಾಹಕ ಮಾರ್ಗ ನೀಡುತ್ತದೆ.', threatCompetition: 'ಸ್ಥಳೀಯ ಮಾರಾಟಗಾರರು ಬೆಲೆ, ಸೌಕರ್ಯ ಅಥವಾ ಕ್ರೆಡಿಟ್‌ನಲ್ಲಿ ಸ್ಪರ್ಧಿಸಬಹುದು.', insightMarketTitle: 'ಮೊದಲು ಜಿಲ್ಲಾ ಮಾರುಕಟ್ಟೆ ಮಾರ್ಗ ಪರಿಶೀಲಿಸಿ', insightMarketText: 'ದೊಡ್ಡ ಸ್ಥಿರ ವೆಚ್ಚಕ್ಕೂ ಮೊದಲು ಸಾಧ್ಯ ಖರೀದಿದಾರರೊಂದಿಗೆ ಮಾತನಾಡಿ ಆರಂಭಿಕ ಆರ್ಡರ್ ಪಡೆಯಿರಿ.', insightPilotTitle: 'ನಿಯಂತ್ರಿತ ಪೈಲಟ್‌ನಿಂದ ಪ್ರಾರಂಭಿಸಿ', insightPilotText: 'ಮೊದಲ 30–45 ದಿನಗಳಿಗೆ ಕನಿಷ್ಠ ಅಗತ್ಯ ಉಪಕರಣ ಮತ್ತು ಸ್ಟಾಕ್‌ನಿಂದ ಪ್ರಾರಂಭಿಸಿ.', insightCashTitle: 'ಕಾರ್ಯ ಬಂಡವಾಳವನ್ನು ರಕ್ಷಿಸಿ', insightCashText: 'ಮಂದ ಮಾರಾಟ, ರಿಪೇರಿ, ಕಚ್ಚಾ ವಸ್ತು ಬೆಲೆ ಮತ್ತು ಕ್ರೆಡಿಟ್‌ಗೆ ನಗದು ಬಫರ್ ಇಡಿ.', demand: '{district}ದಲ್ಲಿ {business}ಗೆ ಸಾಧ್ಯ ಸ್ಥಳೀಯ ಬೇಡಿಕೆ ಮಾರ್ಗ ಇದೆ; ಗ್ರಾಹಕ ಸಂದರ್ಶನ ಮತ್ತು ಟೆಸ್ಟ್ ಮಾರಾಟದಿಂದ ಪರಿಶೀಲಿಸಿ.', gap: '{district}ದಲ್ಲಿ ವಿಶ್ವಾಸಾರ್ಹ ಗುಣಮಟ್ಟ, ವೇಗದ ಸೇವೆ ಅಥವಾ ಸಂಘಟಿತ ವಿತರಣೆ ಒಂದು ಸಾಧ್ಯ ಗ್ಯಾಪ್.', competition: 'ಗುಣಾತ್ಮಕವಾಗಿ ಮಿಶ್ರ; ಆರಂಭಕ್ಕೂ ಮೊದಲು ಸಮೀಪದ ಸ್ಪರ್ಧಿಗಳನ್ನು ಪರಿಶೀಲಿಸಿ.', radius: '3–8 ಕಿಮೀ ಟೆಸ್ಟ್ ಕ್ಲಸ್ಟರ್‌ನಿಂದ ಪ್ರಾರಂಭಿಸಿ ಮರುಬೇಡಿಕೆಯ ನಂತರ ವಿಸ್ತರಿಸಿ.', primaryProduct: 'ಮುಖ್ಯ ಹೆಚ್ಚಿನ-ಆವೃತ್ತಿ ಆಫರ್', secondaryProduct: 'ಮೌಲ್ಯವರ್ಧಿತ ಎರಡನೇ ಆಫರ್', institutional: 'ಬಲ್ಕ್ / ಸಂಸ್ಥಾತ್ಮಕ ಪ್ಯಾಕೇಜ್',
+  },
+  gu: {
+    status: 'આશાસ્પદ — સ્થાનિક ચકાસણી સાથે તબક્કાવાર વધારો',
+    recommendation: '{district}માં તમારો {business} પ્લાન તમારી {skill} કુશળતા અને ઉપલબ્ધ સંસાધનો સાથે મેળ ખાય છે. જિલ્લાની ઓળખેલી સ્થાનિક રૂટથી શરૂઆત કરો: {route}. પહેલું સેટઅપ નાનું રાખો, પુનરાવર્તિત માંગ ચકાસો અને પછી ક્ષમતા વધારો. સંપૂર્ણ મૂડી લગાડતા પહેલાં લાઇસન્સ, યોજના પાત્રતા અને સપ્લાયર ભાવ ચકાસો.',
+    strengthSkill: 'પસંદ કરેલી કુશળતા દૈનિક કામગીરીને સીધી મદદ કરે છે.', strengthCapital: 'ઉપલબ્ધ મૂડી નિયંત્રિત પાઇલટ માટે સારો આધાર આપે છે.', weaknessValidate: 'સ્થાનિક માંગ અને સ્પર્ધક ભાવનું મેદાની ચકાસણું બાકી છે.', opportunityDistrict: 'પસંદ જિલ્લો વિસ્તરણ પહેલાં ચકાસી શકાય તેવી અલગ ગ્રાહક રૂટ આપે છે.', threatCompetition: 'સ્થાનિક વેચાણકાર ભાવ, સુવિધા અથવા ક્રેડિટથી સ્પર્ધા કરી શકે છે.', insightMarketTitle: 'પહેલા જિલ્લાની માર્કેટ રૂટ ચકાસો', insightMarketText: 'મોટા સ્થિર ખર્ચ પહેલાં સંભવિત ખરીદદારો સાથે વાત કરી પ્રારંભિક ઓર્ડર મેળવો.', insightPilotTitle: 'નિયંત્રિત પાઇલટથી શરૂઆત કરો', insightPilotText: 'પ્રથમ 30–45 દિવસ માટે ન્યૂનતમ જરૂરી સાધન અને સ્ટોક રાખો.', insightCashTitle: 'વર્કિંગ કેપિટલ બચાવો', insightCashText: 'ધીમા વેચાણ, રિપેર, કાચા માલના ભાવ અને ક્રેડિટ માટે કેશ બફર રાખો.', demand: '{district}માં {business} માટે સંભવિત સ્થાનિક માંગ રૂટ છે; ગ્રાહક ઇન્ટરવ્યૂ અને ટેસ્ટ વેચાણથી ચકાસો.', gap: '{district}માં વિશ્વસનીય ગુણવત્તા, ઝડપી સેવા અથવા વ્યવસ્થિત ડિલિવરી એક સંભવિત ગેપ છે.', competition: 'ગુણાત્મક રીતે મિશ્ર; લોન્ચ પહેલાં નજીકના સ્પર્ધકો ચકાસો.', radius: '3–8 કિમી ટેસ્ટ ક્લસ્ટરથી શરૂ કરી પુનરાવર્તિત માંગ પછી વધારો.', primaryProduct: 'મુખ્ય ઝડપી વેચાણ ઓફર', secondaryProduct: 'વેલ્યૂ-એડેડ સેકન્ડરી ઓફર', institutional: 'બલ્ક / સંસ્થાકીય પેકેજ',
+  },
+  pa: {
+    status: 'ਉਮੀਦਵਾਰ — ਸਥਾਨਕ ਜਾਂਚ ਨਾਲ ਪੜਾਅਵਾਰ ਵਧਾਓ',
+    recommendation: '{district} ਵਿੱਚ ਤੁਹਾਡਾ {business} ਪਲਾਨ ਤੁਹਾਡੇ {skill} ਹੁਨਰ ਅਤੇ ਉਪਲਬਧ ਸਰੋਤਾਂ ਨਾਲ ਮੇਲ ਖਾਂਦਾ ਹੈ। ਜ਼ਿਲ੍ਹੇ ਲਈ ਪਛਾਣੇ ਸਥਾਨਕ ਰੂਟ ਨਾਲ ਸ਼ੁਰੂ ਕਰੋ: {route}। ਪਹਿਲਾ ਸੈਟਅਪ ਛੋਟਾ ਰੱਖੋ, ਦੁਹਰਾਈ ਮੰਗ ਜਾਂਚੋ ਅਤੇ ਫਿਰ ਸਮਰੱਥਾ ਵਧਾਓ। ਪੂਰੀ ਪੂੰਜੀ ਲਗਾਉਣ ਤੋਂ ਪਹਿਲਾਂ ਲਾਇਸੈਂਸ, ਯੋਜਨਾ ਯੋਗਤਾ ਅਤੇ ਸਪਲਾਇਰ ਕੀਮਤ ਜਾਂਚੋ।',
+    strengthSkill: 'ਚੁਣਿਆ ਹੁਨਰ ਰੋਜ਼ਾਨਾ ਕੰਮ ਨੂੰ ਸਿੱਧੀ ਮਦਦ ਕਰਦਾ ਹੈ।', strengthCapital: 'ਉਪਲਬਧ ਪੂੰਜੀ ਨਿਯੰਤਰਿਤ ਪਾਇਲਟ ਲਈ ਵਧੀਆ ਆਧਾਰ ਹੈ।', weaknessValidate: 'ਸਥਾਨਕ ਮੰਗ ਅਤੇ ਮੁਕਾਬਲੇ ਦੀ ਕੀਮਤ ਮੈਦਾਨ ਵਿੱਚ ਜਾਂਚਣੀ ਬਾਕੀ ਹੈ।', opportunityDistrict: 'ਚੁਣਿਆ ਜ਼ਿਲ੍ਹਾ ਵਧਾਉਣ ਤੋਂ ਪਹਿਲਾਂ ਜਾਂਚਣਯੋਗ ਵੱਖਰਾ ਗਾਹਕ ਰੂਟ ਦਿੰਦਾ ਹੈ।', threatCompetition: 'ਸਥਾਨਕ ਵਿਕਰੇਤਾ ਕੀਮਤ, ਸੁਵਿਧਾ ਜਾਂ ਕਰੈਡਿਟ ਨਾਲ ਮੁਕਾਬਲਾ ਕਰ ਸਕਦੇ ਹਨ।', insightMarketTitle: 'ਪਹਿਲਾਂ ਜ਼ਿਲ੍ਹਾ ਮਾਰਕੀਟ ਰੂਟ ਜਾਂਚੋ', insightMarketText: 'ਵੱਡੇ ਸਥਿਰ ਖਰਚ ਤੋਂ ਪਹਿਲਾਂ ਸੰਭਾਵੀ ਖਰੀਦਦਾਰਾਂ ਨਾਲ ਗੱਲ ਕਰਕੇ ਸ਼ੁਰੂਆਤੀ ਆਰਡਰ ਲਵੋ।', insightPilotTitle: 'ਨਿਯੰਤਰਿਤ ਪਾਇਲਟ ਨਾਲ ਸ਼ੁਰੂ ਕਰੋ', insightPilotText: 'ਪਹਿਲੇ 30–45 ਦਿਨ ਲਈ ਘੱਟੋ-ਘੱਟ ਲੋੜੀਂਦਾ ਸਾਜ਼ੋ-ਸਾਮਾਨ ਅਤੇ ਸਟਾਕ ਰੱਖੋ।', insightCashTitle: 'ਵਰਕਿੰਗ ਕੈਪਿਟਲ ਬਚਾਓ', insightCashText: 'ਧੀਮੀ ਵਿਕਰੀ, ਰਿਪੇਅਰ, ਕੱਚੇ ਮਾਲ ਦੀ ਕੀਮਤ ਅਤੇ ਕਰੈਡਿਟ ਲਈ ਕੈਸ਼ ਬਫਰ ਰੱਖੋ।', demand: '{district} ਵਿੱਚ {business} ਲਈ ਸੰਭਾਵੀ ਸਥਾਨਕ ਮੰਗ ਰੂਟ ਹੈ; ਗਾਹਕ ਇੰਟਰਵਿਊ ਅਤੇ ਟੈਸਟ ਵਿਕਰੀ ਨਾਲ ਜਾਂਚੋ।', gap: '{district} ਵਿੱਚ ਭਰੋਸੇਯੋਗ ਗੁਣਵੱਤਾ, ਤੇਜ਼ ਸੇਵਾ ਜਾਂ ਵਿਵਸਥਿਤ ਡਿਲਿਵਰੀ ਇੱਕ ਸੰਭਾਵੀ ਗੈਪ ਹੈ।', competition: 'ਗੁਣਾਤਮਕ ਤੌਰ ਤੇ ਮਿਲਿਆ-ਜੁਲਿਆ; ਲਾਂਚ ਤੋਂ ਪਹਿਲਾਂ ਨੇੜਲੇ ਮੁਕਾਬਲੇਬਾਜ਼ ਜਾਂਚੋ।', radius: '3–8 ਕਿਮੀ ਟੈਸਟ ਕਲੱਸਟਰ ਤੋਂ ਸ਼ੁਰੂ ਕਰੋ ਅਤੇ ਦੁਹਰਾਈ ਮੰਗ ਤੋਂ ਬਾਅਦ ਵਧਾਓ।', primaryProduct: 'ਮੁੱਖ ਤੇਜ਼-ਵਿਕਰੀ ਆਫਰ', secondaryProduct: 'ਵੈਲਿਊ-ਐਡਡ ਦੂਜਾ ਆਫਰ', institutional: 'ਬਲਕ / ਸੰਸਥਾਗਤ ਪੈਕੇਜ',
+  },
+};
+
+const CATEGORY_SCORE: Record<BusinessCategory, { score: number; breakdown: [number, number, number, number, number] }> = {
+  Dairy: { score: 78, breakdown: [82, 76, 68, 81, 84] },
+  'Food Processing': { score: 77, breakdown: [80, 75, 69, 77, 82] },
+  Retail: { score: 72, breakdown: [74, 80, 62, 72, 71] },
+  'Agriculture Services': { score: 81, breakdown: [85, 78, 77, 82, 83] },
+  Poultry: { score: 74, breakdown: [78, 72, 65, 76, 79] },
+  Tailoring: { score: 76, breakdown: [76, 88, 64, 78, 74] },
+  Handicrafts: { score: 72, breakdown: [73, 75, 62, 74, 77] },
+  'Repair Services': { score: 83, breakdown: [86, 85, 80, 82, 81] },
+  'Small Manufacturing': { score: 77, breakdown: [80, 71, 74, 78, 82] },
+  Other: { score: 75, breakdown: [77, 75, 70, 76, 77] },
+};
+
+function interpolate(value: string, vars: Record<string, string>) {
+  return Object.entries(vars).reduce((result, [key, replacement]) => result.replaceAll(`{${key}}`, replacement), value);
+}
+
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+export async function analyzeBusinessWithAI(formData: AssessmentFormData): Promise<AIAnalysisResponse> {
   try {
+    const authHeaders = await getAuthHeaders();
     const res = await fetch('/api/ai/analyze', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders },
       body: JSON.stringify(formData),
     });
 
     if (res.ok) {
       const data = await res.json();
-      if (data && data.feasibilityScore) {
+      if (data?.feasibilityScore) {
         const fallbackLoc = `${formData.location.village}, ${formData.location.block}, ${formData.location.district} (${formData.location.state})`;
         return {
           feasibilityScore: data.feasibilityScore,
-          recommendation: data.recommendation || 'Evaluated for rural micro-enterprise operations.',
-          swot: {
-            strengths: data.swot?.strengths || DEMO_SWOT.strengths,
-            weaknesses: data.swot?.weaknesses || DEMO_SWOT.weaknesses,
-            opportunities: data.swot?.opportunities || DEMO_SWOT.opportunities,
-            threats: data.swot?.threats || DEMO_SWOT.threats,
-          },
-          insights: data.insights || DEMO_AI_INSIGHTS,
+          recommendation: data.recommendation,
+          swot: data.swot,
+          insights: data.insights || [],
           localOpportunity: {
             ...DEMO_LOCAL_OPPORTUNITY,
             locationSummary: fallbackLoc,
-            demandSignal: `${formData.category} enterprise has strong recurring local interest in ${formData.location.block}.`,
-            marketGap: `Absence of organized, reliable suppliers of ${formData.category.toLowerCase()} within a 5-10km cluster.`,
             ...(data.localOpportunity || {}),
-            suggestedProductMix:
-              data.localOpportunity?.suggestedProductMix ||
-              DEMO_LOCAL_OPPORTUNITY.suggestedProductMix ||
-              ['Primary Product Grade', 'Value-Added Secondary Unit', 'Bulk Institutional Supply'],
           },
           isAiGenerated: data.isAiGenerated ?? true,
         };
       }
     }
   } catch {
-    // Network or server fallback
+    // Network/server errors fall through to a deterministic local plan.
   }
 
-  // Realistic fallback domain engine matching user category and location
   return generateDeterministicAIResponse(formData);
 }
 
@@ -81,318 +176,75 @@ export async function askAssistantQuestion(
   }
 ): Promise<{ answer: string; sources?: string[] }> {
   try {
+    const authHeaders = await getAuthHeaders();
     const res = await fetch('/api/ai/chat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders },
       body: JSON.stringify({ question, context }),
     });
-
     if (res.ok) {
       const data = await res.json();
-      if (data && data.answer) {
-        return data;
-      }
+      if (data?.answer) return data;
     }
   } catch {
-    // Graceful fallback to domain rules
+    // Fall back to a compact deterministic answer.
   }
 
-  return getFallbackAssistantAnswer(question, context);
+  const language = (context.language || 'en') as LanguageCode;
+  if (language === 'hi') {
+    return {
+      answer: `आपके ${context.businessIdea || context.category || 'व्यवसाय'} के लिए पहले स्थानीय मांग जांचें, फिर न्यूनतम व्यवहारिक सेटअप से शुरू करें। उपलब्ध मार्जिन ₹${(context.margin || 50000).toLocaleString('en-IN')} है, इसलिए मशीनरी पर पूरी राशि लगाने के बजाय वर्किंग कैपिटल और सुरक्षा रिज़र्व रखें। योजना/लोन की अंतिम पात्रता आधिकारिक पोर्टल और बैंक से जांचें।`,
+      sources: ['NIRNAY AI Advisory Engine'],
+    };
+  }
+  return {
+    answer: `For your ${context.businessIdea || context.category || 'business'}, validate local demand first and begin with the smallest workable setup. With ₹${(context.margin || 50000).toLocaleString('en-IN')} available margin, keep part of the money as working capital and safety buffer instead of spending everything on equipment. Verify final scheme and loan eligibility with the official portal and lender.`,
+    sources: ['NIRNAY AI Advisory Engine'],
+  };
 }
 
 function generateDeterministicAIResponse(formData: AssessmentFormData): AIAnalysisResponse {
-  const cat = formData.category;
-  const loc = `${formData.location.village}, ${formData.location.district} (${formData.location.state})`;
-
-  const categoryProfiles: Record<
-    BusinessCategory,
-    {
-      score: number;
-      label: string;
-      breakdown: [number, number, number, number, number];
-      rec: string;
-      strengths: string[];
-      weaknesses: string[];
-      opportunities: string[];
-      threats: string[];
-      insights: Array<{ title: string; description: string; tag: string }>;
-    }
-  > = {
-    Dairy: {
-      score: 78,
-      label: 'Promising — proceed with controlled investment',
-      breakdown: [82, 76, 68, 81, 84],
-      rec: `Your proposed dairy business in ${loc} shows strong fundamentals. Daily recurring household demand and tea stall contracts provide resilient cash velocity, provided you maintain disciplined cold storage and upfront milk fat testing.`,
-      strengths: DEMO_SWOT.strengths,
-      weaknesses: DEMO_SWOT.weaknesses,
-      opportunities: DEMO_SWOT.opportunities,
-      threats: DEMO_SWOT.threats,
-      insights: DEMO_AI_INSIGHTS,
-    },
-    'Food Processing': {
-      score: 75,
-      label: 'Viable — requires quality testing and packaging certification',
-      breakdown: [79, 74, 70, 75, 78],
-      rec: `Food processing near ${formData.location.block} has strong value-addition potential. Focus on local shelf-stable products (spices, pulses, pickles, or flour milling) with FSSAI basic registration.`,
-      strengths: [
-        'Raw agricultural produce available at farmgate rates locally',
-        '30-45% value addition margin over raw crop sales',
-        'Year-round consumption in rural and semi-urban markets',
-      ],
-      weaknesses: [
-        'Seasonal raw material price spikes post-harvest',
-        'Packaging moisture control and shelf-life monitoring needed',
-      ],
-      opportunities: [
-        'Branded rural packaging in 250g/500g pouches for daily wage earners',
-        'Supply tie-ups with local Kirana stores across 10 villages',
-      ],
-      threats: [
-        'Competition from large regional FMCG packaged brands',
-        'FSSAI compliance scrutiny and hygiene maintenance costs',
-      ],
-      insights: [
-        {
-          title: 'Start with 2-3 High Velocity Items',
-          description: 'Avoid spreading capital across too many grain or spice variants initially.',
-          tag: 'Production Focus',
-        },
-        {
-          title: 'Prioritize Moisture-Proof Sealing',
-          description: 'Invest in a dependable continuous band sealer to avoid rainy season spoilage.',
-          tag: 'Quality Control',
-        },
-      ],
-    },
-    Retail: {
-      score: 72,
-      label: 'Moderately Feasible — location and credit management critical',
-      breakdown: [74, 80, 62, 72, 71],
-      rec: `Retail in ${formData.location.village} provides fast daily turnover. The primary risk is customer credit (Udhaar); strictly cap customer credit at under 15% of monthly sales.`,
-      strengths: ['Immediate daily cash collections', 'Fast inventory turnover on fast-moving goods'],
-      weaknesses: ['Working capital locked in unpaid customer credit registers (Khata)', 'Low gross margins (8-14%) on branded goods'],
-      opportunities: ['Bundled delivery to surrounding hamlets', 'Digital payments (UPI) and micro-ATM agency add-on'],
-      threats: ['Local competitors matching prices', 'Wholesale supplier price hikes'],
-      insights: [
-        {
-          title: 'Digitize Khata & Limit Credit',
-          description: 'Send automated SMS reminders and enforce a strict 14-day credit settlement window.',
-          tag: 'Cash Management',
-        },
-      ],
-    },
-    'Agriculture Services': {
-      score: 81,
-      label: 'High Potential — strong seasonal demand in rural belt',
-      breakdown: [85, 78, 77, 82, 83],
-      rec: `Farm machinery custom hiring and organic input distribution around ${loc} addresses a proven mechanization gap for smallholder farmers.`,
-      strengths: ['High demand during sowing and harvesting peaks', 'Government subsidy priority under agricultural schemes'],
-      weaknesses: ['Seasonality with 3-4 lean months per year', 'Equipment maintenance and operator training costs'],
-      opportunities: ['Rental service for power tillers, sprayers, and solar pumps', 'Contract seedling nursery'],
-      threats: ['Monsoon delays impacting farmer hiring capacity', 'Unplanned machine breakdowns during harvest peak'],
-      insights: [
-        {
-          title: 'Diversify Off-Season Services',
-          description: 'Add transport trolley services and solar water pumping during non-sowing months.',
-          tag: 'Year-Round Cash Flow',
-        },
-      ],
-    },
-    Poultry: {
-      score: 74,
-      label: 'Feasible — strict biosecurity and feed cost buffer required',
-      breakdown: [78, 72, 65, 76, 79],
-      rec: `Broiler or Desi poultry in ${loc} enjoys steady weekly mandi demand. Manage feed costs through local maize aggregation and maintain strict coop vaccination.`,
-      strengths: ['Short 35-42 day production cycle', 'Consistent demand from local meat shops and weekly markets'],
-      weaknesses: ['Mortality risk from temperature fluctuations', 'Feed represents up to 70% of total recurring cost'],
-      opportunities: ['Desi poultry and organic country eggs fetching premium prices', 'Manure resale to vegetable growers'],
-      threats: ['Disease outbreaks and bird flu alerts', 'Feed ingredient price volatility'],
-      insights: [
-        {
-          title: 'Adopt Staggered Batch System',
-          description: 'Run two overlapping sheds so cash inflow arrives every 21 days instead of waiting 45 days.',
-          tag: 'Liquidity Planning',
-        },
-      ],
-    },
-    Tailoring: {
-      score: 76,
-      label: 'Low Risk & Steady — high margin on custom alterations',
-      breakdown: [76, 88, 64, 78, 74],
-      rec: `Tailoring and boutique garments in ${loc} has low initial capital requirements. Expand into school uniforms and festive bulk orders to secure bulk cash flow.`,
-      strengths: ['High service margin (60-70%)', 'Low capital entry barrier'],
-      weaknesses: ['Capacity capped by individual tailor labor hours', 'Peak festival workload followed by dry periods'],
-      opportunities: ['School uniform annual supply contracts', 'Ready-to-wear local blouse and kurta designs'],
-      threats: ['Cheap machine-made garments from nearby towns', 'Electricity load shedding affecting electric sewing machines'],
-      insights: [
-        {
-          title: 'Secure School Uniform Contracts in April-June',
-          description: 'Approach 3 local private and primary schools early to lock in bulk pre-orders.',
-          tag: 'Institutional Revenue',
-        },
-      ],
-    },
-    Handicrafts: {
-      score: 71,
-      label: 'Niche Viability — needs market linkages and exhibition sales',
-      breakdown: [72, 75, 60, 74, 76],
-      rec: `Artisanal craft in ${loc} benefits from authentic cultural heritage. Bridge the local-to-urban gap through regional exhibitions, SHG federations, and postal dispatch.`,
-      strengths: ['Unique traditional skill set', 'Low raw material costs'],
-      weaknesses: ['Slow inventory liquidation', 'Dependence on seasonal tourist or urban buyers'],
-      opportunities: ['State handloom emporium empanelment', 'Corporate gift packaging for festive seasons'],
-      threats: ['Factory replica goods selling at lower prices', 'Intermediary middlemen taking excessive margins'],
-      insights: [
-        {
-          title: 'Register on ONDC and GeM Portal',
-          description: 'Access government department procurement tenders for gifting items.',
-          tag: 'Market Linkage',
-        },
-      ],
-    },
-    'Repair Services': {
-      score: 83,
-      label: 'Very Strong — continuous essential demand with minimal inventory',
-      breakdown: [86, 85, 80, 82, 81],
-      rec: `Mobile, two-wheeler, or agricultural pump repair in ${loc} has virtually zero perishable inventory risk and high labor margins.`,
-      strengths: ['Recurring breakdown demand', 'Immediate spot cash payment for labor charges'],
-      weaknesses: ['Skill dependence on specialized tools', 'Spare parts sourcing turnaround from district town'],
-      opportunities: ['Solar inverter and battery maintenance contracts', 'Mobile door-step breakdown service'],
-      threats: ['New electronic components requiring specialized diagnostic equipment', 'Local roadside informal mechanics'],
-      insights: [
-        {
-          title: 'Stock Top-20 Fast Moving Spare Parts',
-          description: 'Keep plugs, filters, fuses, and cables in stock to avoid sending customers to distant towns.',
-          tag: 'Service Turnaround',
-        },
-      ],
-    },
-    'Small Manufacturing': {
-      score: 77,
-      label: 'Capital Intensive — ensures strong defensibility once established',
-      breakdown: [80, 71, 74, 78, 82],
-      rec: `Light manufacturing (e.g. fly-ash bricks, paper plates, corrugated boxes) in ${loc} benefits from low rural labor and land rent, with high demand from local construction.`,
-      strengths: ['Bulk order contracts', 'Protection against small casual competitors'],
-      weaknesses: ['High single-point machine dependency', 'Industrial 3-phase electricity requirement'],
-      opportunities: ['PMAY rural housing scheme building material demand', 'Local ban on single-use plastics promoting paper alternatives'],
-      threats: ['Power supply interruptions', 'Raw material bulk transport freight costs'],
-      insights: [
-        {
-          title: 'Partner with Local Gram Panchayat Contractors',
-          description: 'Supply paved blocks and bricks directly to rural road and drainage works.',
-          tag: 'Government Offtake',
-        },
-      ],
-    },
-    Other: {
-      score: 75,
-      label: 'Feasible — proceed with systematic local survey',
-      breakdown: [77, 75, 70, 76, 77],
-      rec: `Your enterprise in ${loc} shows viable opportunity. Verify the 5km competitor density and secure confirmed initial orders before making heavy capital outlays.`,
-      strengths: DEMO_SWOT.strengths,
-      weaknesses: DEMO_SWOT.weaknesses,
-      opportunities: DEMO_SWOT.opportunities,
-      threats: DEMO_SWOT.threats,
-      insights: DEMO_AI_INSIGHTS,
-    },
-  };
-
-  const profile = categoryProfiles[cat] || categoryProfiles['Dairy'];
+  const language = formData.preferredLanguage || 'en';
+  const copy = FALLBACK_COPY[language] || FALLBACK_COPY.en;
+  const district = formData.location.district || formData.location.block || 'your district';
+  const business = formData.businessIdea || formData.ideaText || formData.category;
+  const skill = formData.selectedExpertise || formData.category;
+  const route = formData.targetMarket || district;
+  const profile = CATEGORY_SCORE[formData.category] || CATEGORY_SCORE.Other;
+  const loc = `${formData.location.village}, ${district} (${formData.location.state})`;
+  const recommendation = interpolate(copy.recommendation, { business, district, skill, route });
 
   return {
     feasibilityScore: {
       overallScore: profile.score,
-      statusLabel: profile.label,
+      statusLabel: copy.status,
       marketPotential: profile.breakdown[0],
       capitalFit: profile.breakdown[1],
       competitionScore: profile.breakdown[2],
       operationalFeasibility: profile.breakdown[3],
       growthPotential: profile.breakdown[4],
     },
-    recommendation: profile.rec,
+    recommendation,
     swot: {
-      strengths: profile.strengths,
-      weaknesses: profile.weaknesses,
-      opportunities: profile.opportunities,
-      threats: profile.threats,
+      strengths: [copy.strengthSkill, copy.strengthCapital],
+      weaknesses: [copy.weaknessValidate],
+      opportunities: [copy.opportunityDistrict],
+      threats: [copy.threatCompetition],
     },
-    insights: profile.insights,
+    insights: [
+      { title: copy.insightMarketTitle, description: copy.insightMarketText, tag: district },
+      { title: copy.insightPilotTitle, description: copy.insightPilotText, tag: skill },
+      { title: copy.insightCashTitle, description: copy.insightCashText, tag: 'Cash flow' },
+    ],
     localOpportunity: {
       ...DEMO_LOCAL_OPPORTUNITY,
       locationSummary: loc,
-      demandSignal: `${cat} enterprise has strong recurring local interest in ${formData.location.block}.`,
-      marketGap: `Absence of standardized quality and reliable delivery of ${cat.toLowerCase()} in a 5-10km cluster.`,
+      demandSignal: interpolate(copy.demand, { business, district }),
+      marketGap: interpolate(copy.gap, { district }),
+      competitorDensity: copy.competition,
+      recommendedRadius: copy.radius,
+      suggestedProductMix: [copy.primaryProduct, copy.secondaryProduct, copy.institutional],
     },
     isAiGenerated: false,
-  };
-}
-
-function getFallbackAssistantAnswer(
-  question: string,
-  context: {
-    businessIdea?: string;
-    category?: string;
-    margin?: number;
-    projectCost?: number;
-    loan?: number;
-    scheme?: string;
-    language?: string;
-  }
-): { answer: string; sources: string[] } {
-  const q = question.toLowerCase();
-  const margin = context.margin || 50000;
-  const projectCost = context.projectCost || Math.round(margin / 0.1);
-  const loan = context.loan || Math.round(projectCost * 0.9);
-
-  if (q.includes('50,000') || q.includes('50000') || q.includes('start with') || q.includes('p पूंजी') || q.includes('शुरू')) {
-    return {
-      answer: `With ₹50,000 margin capital under the SIH26091 financial model:
-1. Your 10% Margin: ₹50,000
-2. Eligible Project Cost: ₹5,00,000 (Margin / 10%)
-3. Financing Support: ₹4,50,000 (90% via Term Loan Scheme at 8% p.a., 7-year tenure, with 6-month moratorium).
-
-Top Recommended Businesses in Rural/Semi-Urban Clusters:
-• Dairy & Milk Collection Center (Curd/Paneer/Fresh Milk)
-• Agro-Machinery & Power Tiller Rental Service
-• Flour & Spice Processing / Oil Expeller
-• Two-Wheeler & Solar Equipment Repair Center`,
-      sources: ['SIH26091 Problem Statement', 'RBI Financial Education for Small Entrepreneurs'],
-    };
-  }
-
-  if (q.includes('hindi') || q.includes('हिंदी') || q.includes('loan') || q.includes('ऋण') || q.includes('कर्ज')) {
-    return {
-      answer: `आपके ऋण की संरचना (SIH26091 नियमों के अनुसार):
-• आपकी पूंजी (10% मार्जिन): ₹${margin.toLocaleString('en-IN')}
-• कुल प्रोजेक्ट लागत: ₹${projectCost.toLocaleString('en-IN')}
-• बैंक/एजेंसी ऋण (90%): ₹${loan.toLocaleString('en-IN')}
-• लागू योजना: ${projectCost > 140000 ? 'टर्म लोन योजना (Term Loan Scheme)' : 'माइक्रो फाइनेंस योजना (Micro Finance Scheme)'}
-• ब्याज दर: ${projectCost > 140000 ? '8.0% वार्षिक' : '6.5% वार्षिक'}
-• ऋण अवधि: ${projectCost > 140000 ? '7 वर्ष (84 माह)' : '3 वर्ष (36 माह)'}
-• मोरेटोरियम (छूट अवधि): ${projectCost > 140000 ? '6 महीने' : '3 महीने'} (इस दौरान केवल सामान्य ब्याज, मूलधन की किस्त नहीं देनी होती)।`,
-      sources: ['SIH26091 Guidelines', 'Udyam Registration Portal'],
-    };
-  }
-
-  if (q.includes('scheme') || q.includes('योजना') || q.includes('difference') || q.includes('micro') || q.includes('term')) {
-    return {
-      answer: `NIRNAY AI utilizes the deterministic SIH26091 scheme router:
-• Option A: Micro Finance Scheme
-  - Applied when project cost is up to ₹1.40 Lakh.
-  - Agency support up to 90% (max ₹1.25 Lakh), 6.5% interest, 3-year tenure, 3-month moratorium.
-• Option B: Term Loan Scheme
-  - Applied when project cost exceeds ₹1.40 Lakh up to ₹50 Lakh.
-  - Agency support up to 90% (max ₹45 Lakh), 8% interest, 7-year tenure, 6-month moratorium.
-
-Your current estimated project cost is ₹${projectCost.toLocaleString('en-IN')}, which places you in the ${projectCost > 140000 ? 'Term Loan Scheme' : 'Micro Finance Scheme'}.`,
-      sources: ['SIH26091 Scheme Guidelines'],
-    };
-  }
-
-  return {
-    answer: `NIRNAY AI Recommendation for your ${context.category || 'proposed'} business:
-1. Feasibility: Your project cost is ₹${projectCost.toLocaleString('en-IN')} backed by ₹${margin.toLocaleString('en-IN')} margin.
-2. Financing: Under ${context.scheme || (projectCost > 140000 ? 'Term Loan Scheme' : 'Micro Finance Scheme')}, monthly repayments are calculated deterministically to protect your operating cash flow.
-3. Key Advice: Complete 5 local customer pre-orders before purchasing machinery, and maintain at least 30-45 days of working capital reserve.`,
-    sources: ['SIH26091 Advisory Engine', 'Haqdarshak & RBI Case Studies'],
   };
 }
