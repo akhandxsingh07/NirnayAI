@@ -1,20 +1,109 @@
-import { FinancialPlanData, FinancialStructureData, SchemeOption, EMIResult, GrowthProjectionData, GrowthDataPoint } from '../types';
+import {
+  BusinessCategory,
+  FinancialPlanData,
+  FinancialStructureData,
+  SchemeOption,
+  EMIResult,
+  GrowthProjectionData,
+  GrowthDataPoint,
+} from '../types';
 
 /**
- * Deterministic Financial Calculations for SIH26091
- * Rules are strictly derived from the problem statement parameters:
- * - Project Cost = Available Margin / 10%
- * - Loan Requirement = 90% of Project Cost
+ * Deterministic planning calculations for the SIH prototype.
+ * These are indicative decision-support assumptions, not lender sanctions.
  */
+
+type BusinessFinanceProfile = {
+  capexShare: number;
+  inventoryShare: number;
+  workingCapitalShare: number;
+  steadyRevenueRate: number;
+  operatingExpenseRate: number;
+  rampStart: number;
+  year3Growth: number;
+};
+
+const BUSINESS_FINANCE_PROFILES: Record<BusinessCategory, BusinessFinanceProfile> = {
+  Dairy: { capexShare: 0.55, inventoryShare: 0.2, workingCapitalShare: 0.25, steadyRevenueRate: 0.19, operatingExpenseRate: 0.68, rampStart: 0.38, year3Growth: 0.12 },
+  'Food Processing': { capexShare: 0.45, inventoryShare: 0.3, workingCapitalShare: 0.25, steadyRevenueRate: 0.24, operatingExpenseRate: 0.7, rampStart: 0.35, year3Growth: 0.16 },
+  Retail: { capexShare: 0.25, inventoryShare: 0.5, workingCapitalShare: 0.25, steadyRevenueRate: 0.28, operatingExpenseRate: 0.78, rampStart: 0.45, year3Growth: 0.1 },
+  'Agriculture Services': { capexShare: 0.5, inventoryShare: 0.15, workingCapitalShare: 0.35, steadyRevenueRate: 0.18, operatingExpenseRate: 0.58, rampStart: 0.32, year3Growth: 0.14 },
+  Poultry: { capexShare: 0.5, inventoryShare: 0.25, workingCapitalShare: 0.25, steadyRevenueRate: 0.23, operatingExpenseRate: 0.7, rampStart: 0.3, year3Growth: 0.13 },
+  Tailoring: { capexShare: 0.4, inventoryShare: 0.2, workingCapitalShare: 0.4, steadyRevenueRate: 0.16, operatingExpenseRate: 0.48, rampStart: 0.42, year3Growth: 0.18 },
+  Handicrafts: { capexShare: 0.35, inventoryShare: 0.35, workingCapitalShare: 0.3, steadyRevenueRate: 0.2, operatingExpenseRate: 0.6, rampStart: 0.32, year3Growth: 0.2 },
+  'Repair Services': { capexShare: 0.45, inventoryShare: 0.15, workingCapitalShare: 0.4, steadyRevenueRate: 0.18, operatingExpenseRate: 0.45, rampStart: 0.45, year3Growth: 0.17 },
+  'Small Manufacturing': { capexShare: 0.6, inventoryShare: 0.2, workingCapitalShare: 0.2, steadyRevenueRate: 0.2, operatingExpenseRate: 0.67, rampStart: 0.3, year3Growth: 0.15 },
+  Other: { capexShare: 0.4, inventoryShare: 0.25, workingCapitalShare: 0.35, steadyRevenueRate: 0.18, operatingExpenseRate: 0.6, rampStart: 0.38, year3Growth: 0.14 },
+};
+
+export function getBusinessFinanceProfile(category: BusinessCategory): BusinessFinanceProfile {
+  return BUSINESS_FINANCE_PROFILES[category] || BUSINESS_FINANCE_PROFILES.Other;
+}
+
+export function getCapitalDeploymentCopy(category: BusinessCategory): {
+  capex: string;
+  inventory: string;
+  workingCapital: string;
+} {
+  const byCategory: Record<BusinessCategory, { capex: string; inventory: string; workingCapital: string }> = {
+    Dairy: {
+      capex: 'Chilling/testing equipment, food-grade handling assets and essential setup.',
+      inventory: 'Initial milk procurement, testing consumables and packaging material.',
+      workingCapital: 'Utilities, collection payments, transport, maintenance and cash reserve.',
+    },
+    'Food Processing': {
+      capex: 'Processing, sealing, weighing, storage and basic food-safety equipment.',
+      inventory: 'Raw ingredients, packaging, labels and first production-batch inputs.',
+      workingCapital: 'Utilities, transport, labour, spoilage buffer and repeat procurement cash.',
+    },
+    Retail: {
+      capex: 'Shelving, billing tools, storage, basic fixtures and shop setup.',
+      inventory: 'Opening fast-moving stock matched to the selected local customer segment.',
+      workingCapital: 'Replenishment cash, rent/utilities, local delivery and credit-loss buffer.',
+    },
+    'Agriculture Services': {
+      capex: 'Service tools, small machinery, safety equipment and transport/setup assets.',
+      inventory: 'Frequently used spare parts, consumables and seasonal service inputs.',
+      workingCapital: 'Fuel, repairs, field travel, seasonal demand swings and customer-credit buffer.',
+    },
+    Poultry: {
+      capex: 'Shed setup, feeders, drinkers, ventilation, brooding and hygiene equipment.',
+      inventory: 'Initial birds/chicks, feed, litter, vaccines and basic consumables.',
+      workingCapital: 'Feed cycles, electricity, water, mortality buffer and market-delay reserve.',
+    },
+    Tailoring: {
+      capex: 'Sewing/finishing machines, cutting table, tools and compact workspace setup.',
+      inventory: 'Thread, lining, trims, sample fabric and fast-moving tailoring consumables.',
+      workingCapital: 'Rent, electricity, alterations, local marketing and customer-order cash buffer.',
+    },
+    Handicrafts: {
+      capex: 'Core artisan tools, finishing equipment, display/storage and workspace setup.',
+      inventory: 'Raw craft material, dyes/finishes, packaging and sample-product stock.',
+      workingCapital: 'Artisan labour, marketplace fees, transport, seasonal demand and order-cycle buffer.',
+    },
+    'Repair Services': {
+      capex: 'Diagnostic tools, repair equipment, safety kit and compact service workspace.',
+      inventory: 'Common replacement parts, connectors, consumables and small accessories.',
+      workingCapital: 'Travel, utilities, repeat parts purchases, warranty callbacks and emergency reserve.',
+    },
+    'Small Manufacturing': {
+      capex: 'Production machinery, work benches, safety equipment and essential workshop setup.',
+      inventory: 'Opening raw material, components, consumables and packaging stock.',
+      workingCapital: 'Power, labour, maintenance, supplier cycles and customer-payment buffer.',
+    },
+    Other: {
+      capex: 'Essential tools, equipment and minimum viable setup assets.',
+      inventory: 'Opening stock, consumables or inputs required for the first sales cycle.',
+      workingCapital: 'Operating expenses, replenishment, marketing and contingency reserve.',
+    },
+  };
+  return byCategory[category] || byCategory.Other;
+}
 
 export function calculateProjectStructure(availableMargin: number): FinancialPlanData {
   const safeMargin = Math.max(5000, Number(availableMargin) || 50000);
-  // Project Cost = Margin / 0.10
   const projectCost = Math.round(safeMargin / 0.1);
-  // Loan = 90% of Project Cost
   const loanRequirement = Math.round(projectCost * 0.9);
-
-  // Reasonable allocation breakdown
   const workingCapital = Math.round(projectCost * 0.35);
   const equipmentCapital = Math.round(projectCost * 0.65);
 
@@ -29,16 +118,19 @@ export function calculateProjectStructure(availableMargin: number): FinancialPla
   };
 }
 
-export function calculateFinancialStructure(availableMargin: number): FinancialStructureData {
+export function calculateFinancialStructure(
+  availableMargin: number,
+  category: BusinessCategory = 'Other'
+): FinancialStructureData {
   const safeMargin = Math.max(5000, Number(availableMargin) || 50000);
   const projectCost = Math.round(safeMargin / 0.1);
   const loanRequirement = Math.round(projectCost * 0.9);
+  const profile = getBusinessFinanceProfile(category);
 
   const isMicro = projectCost <= 140000;
   const interestRate = isMicro ? 6.5 : 8.0;
   const tenureMonths = isMicro ? 36 : 84;
   const moratoriumMonths = isMicro ? 3 : 6;
-
   const emiCalc = calculateEMI(loanRequirement, interestRate, tenureMonths, moratoriumMonths);
 
   return {
@@ -47,18 +139,18 @@ export function calculateFinancialStructure(availableMargin: number): FinancialS
     loanRequirement,
     marginPercentage: 10,
     loanPercentage: 90,
-    recommendedScheme: isMicro ? 'Micro Finance Scheme' : 'Term Loan Scheme',
+    recommendedScheme: isMicro ? 'Micro Finance Planning Route' : 'Term Loan Planning Route',
     schemeRationale: isMicro
-      ? `Project cost (${formatINR(projectCost)}) is within ₹1.40 Lakh threshold, eligible for 6.5% interest Micro Finance Scheme.`
-      : `Project cost (${formatINR(projectCost)}) exceeds ₹1.40 Lakh threshold, qualifying for 8% interest Term Loan Scheme up to 7 years.`,
+      ? `Indicative planning route because project cost ${formatINR(projectCost)} is within the prototype's ₹1.40 lakh threshold. Verify the actual lender, rate, tenure and eligibility before applying.`
+      : `Indicative planning route because project cost ${formatINR(projectCost)} is above the prototype's ₹1.40 lakh threshold. Verify the actual lender, rate, tenure, collateral and eligibility before applying.`,
     interestRate,
     tenureMonths,
     moratoriumMonths,
     monthlyEMI: emiCalc.monthlyEMI,
     breakdown: {
-      capexMachinery: Math.round(projectCost * 0.62),
-      initialInventory: Math.round(projectCost * 0.18),
-      workingCapital: Math.round(projectCost * 0.20),
+      capexMachinery: Math.round(projectCost * profile.capexShare),
+      initialInventory: Math.round(projectCost * profile.inventoryShare),
+      workingCapital: Math.round(projectCost * profile.workingCapitalShare),
     },
   };
 }
@@ -76,31 +168,34 @@ export const SCHEME_OPTIONS: Array<{
 }> = [
   {
     id: 'micro-finance',
-    code: 'OPTION A',
-    name: 'Micro Finance Scheme',
-    projectCostCeiling: 'Up to ₹1.40 Lakh',
-    maxAgencySupport: 'Up to 90% (max ₹1.25 Lakh)',
-    interestRate: '6.5% p.a.',
-    tenure: '3 years (36 months)',
-    moratorium: '3 months grace',
-    target: 'Micro initiatives, individual artisans, roadside units & street vendors',
+    code: 'PLANNING OPTION A',
+    name: 'Micro Finance Planning Route',
+    projectCostCeiling: 'Prototype threshold: up to ₹1.40 lakh',
+    maxAgencySupport: 'Illustrative debt requirement: up to 90%',
+    interestRate: 'Illustrative 6.5% p.a.',
+    tenure: 'Illustrative 3 years',
+    moratorium: 'Illustrative 3 months',
+    target: 'Low-capex micro-enterprise planning; verify a real lender/scheme before application',
   },
   {
     id: 'term-loan',
-    code: 'OPTION B',
-    name: 'Term Loan Scheme',
-    projectCostCeiling: 'Above ₹1.40 Lakh up to ₹50 Lakh',
-    maxAgencySupport: 'Up to 90% (max ₹45 Lakh)',
-    interestRate: '8.0% p.a.',
-    tenure: '7 years (84 months)',
-    moratorium: '6 months grace',
-    target: 'Small rural enterprises, machinery acquisition & processing units',
+    code: 'PLANNING OPTION B',
+    name: 'Term Loan Planning Route',
+    projectCostCeiling: 'Prototype threshold: above ₹1.40 lakh',
+    maxAgencySupport: 'Illustrative debt requirement: up to 90%',
+    interestRate: 'Illustrative 8.0% p.a.',
+    tenure: 'Illustrative up to 7 years',
+    moratorium: 'Illustrative 6 months',
+    target: 'Machinery/service enterprise planning; verify current bank and scheme terms',
   },
 ];
 
-export function generateGrowthProjections(availableMargin: number): GrowthProjectionData {
-  const fin = calculateFinancialStructure(availableMargin);
-  return calculateGrowthProjections(fin.totalProjectCost, fin.monthlyEMI, 'General');
+export function generateGrowthProjections(
+  availableMargin: number,
+  category: BusinessCategory = 'Other'
+): GrowthProjectionData {
+  const fin = calculateFinancialStructure(availableMargin, category);
+  return calculateGrowthProjections(fin.totalProjectCost, fin.monthlyEMI, category);
 }
 
 export function getSchemeOptions(projectCost: number): {
@@ -111,10 +206,10 @@ export function getSchemeOptions(projectCost: number): {
 
   const optionA: SchemeOption = {
     id: 'MICRO_FINANCE',
-    name: 'Micro Finance Scheme',
-    tagline: 'Ideal for micro enterprises & small village setups up to ₹1.40 Lakh',
-    applicableProjectCostRule: 'For project costs up to ₹1.40 Lakh',
-    agencySupportText: 'Agency support up to 90% (max ₹1.25 Lakh)',
+    name: 'Micro Finance Planning Route',
+    tagline: 'Indicative low-capex financing structure',
+    applicableProjectCostRule: 'Prototype planning threshold up to ₹1.40 lakh',
+    agencySupportText: 'Illustrative debt share up to 90%',
     agencySupportPercent: 90,
     maxAgencyAmount: 125000,
     interestRate: 6.5,
@@ -123,17 +218,17 @@ export function getSchemeOptions(projectCost: number): {
     moratoriumMonths: 3,
     isRecommended: isMicro,
     whyRecommended: isMicro
-      ? 'Your project cost (₹' + projectCost.toLocaleString('en-IN') + ') is within the ₹1.40 Lakh threshold for Micro Finance support.'
-      : 'Applicable when project cost is capped at ₹1.40 Lakh.',
-    parametersBasis: 'Based on SIH26091 problem-statement parameters',
+      ? `Indicative match because project cost ${formatINR(projectCost)} is within the prototype threshold. Verify real lender eligibility and terms.`
+      : 'Use only as a planning comparison for lower-cost projects.',
+    parametersBasis: 'Illustrative SIH prototype assumptions; not an official lender sanction or scheme rule',
   };
 
   const optionB: SchemeOption = {
     id: 'TERM_LOAN',
-    name: 'Term Loan Scheme',
-    tagline: 'Structured growth financing for projects above ₹1.40 Lakh up to ₹50 Lakh',
-    applicableProjectCostRule: 'For project costs above ₹1.40 Lakh up to ₹50 Lakh',
-    agencySupportText: 'Agency support up to 90% (max ₹45 Lakh)',
+    name: 'Term Loan Planning Route',
+    tagline: 'Indicative long-term financing structure for larger setups',
+    applicableProjectCostRule: 'Prototype planning threshold above ₹1.40 lakh',
+    agencySupportText: 'Illustrative debt share up to 90%',
     agencySupportPercent: 90,
     maxAgencyAmount: 4500000,
     interestRate: 8.0,
@@ -142,9 +237,9 @@ export function getSchemeOptions(projectCost: number): {
     moratoriumMonths: 6,
     isRecommended: !isMicro,
     whyRecommended: !isMicro
-      ? 'Your project cost (₹' + projectCost.toLocaleString('en-IN') + ') exceeds ₹1.40 Lakh, qualifying for long-term Term Loan financing with 6-month moratorium.'
-      : 'Applicable when project cost exceeds ₹1.40 Lakh.',
-    parametersBasis: 'Based on SIH26091 problem-statement parameters',
+      ? `Indicative match because project cost ${formatINR(projectCost)} is above the prototype threshold. Verify real bank/scheme eligibility, rate and security requirements.`
+      : 'Use only as a planning comparison for higher-cost projects.',
+    parametersBasis: 'Illustrative SIH prototype assumptions; not an official lender sanction or scheme rule',
   };
 
   return {
@@ -153,14 +248,7 @@ export function getSchemeOptions(projectCost: number): {
   };
 }
 
-/**
- * Standard Reducing Balance Amortization Formula
- * EMI = [P * r * (1 + r)^n] / [(1 + r)^n - 1]
- * where:
- * P = principal loan amount
- * r = monthly interest rate = (annualRate / 12) / 100
- * n = repayment tenure in months (active payment months after moratorium)
- */
+/** Standard reducing-balance amortization formula. */
 export function calculateEMI(
   loanAmount: number,
   annualInterestRate: number,
@@ -171,12 +259,8 @@ export function calculateEMI(
   const annualRate = Math.max(0.1, annualInterestRate);
   const totalMonths = Math.max(6, tenureMonths);
   const moratorium = Math.min(Math.max(0, moratoriumMonths), totalMonths - 3);
-
-  // Active repayment months
   const activeMonths = totalMonths - moratorium;
   const monthlyRate = annualRate / 12 / 100;
-
-  // EMI formula
   const emiFactor = Math.pow(1 + monthlyRate, activeMonths);
   const monthlyEMI = Math.round((P * monthlyRate * emiFactor) / (emiFactor - 1));
 
@@ -184,36 +268,19 @@ export function calculateEMI(
   let accumulatedInterest = 0;
   const schedule = [];
 
-  // 1. Moratorium Period: Only interest or grace
   for (let m = 1; m <= moratorium; m++) {
     const interestDuringMoratorium = Math.round(currentBalance * monthlyRate);
     accumulatedInterest += interestDuringMoratorium;
-    schedule.push({
-      month: m,
-      emi: interestDuringMoratorium, // Only simple interest during grace
-      principal: 0,
-      interest: interestDuringMoratorium,
-      balance: currentBalance,
-    });
+    schedule.push({ month: m, emi: interestDuringMoratorium, principal: 0, interest: interestDuringMoratorium, balance: currentBalance });
   }
 
-  // 2. Active Amortization Period
   for (let m = moratorium + 1; m <= totalMonths; m++) {
     const interestForMonth = Math.round(currentBalance * monthlyRate);
     const principalForMonth = Math.min(monthlyEMI - interestForMonth, currentBalance);
     accumulatedInterest += interestForMonth;
     currentBalance = Math.max(0, currentBalance - principalForMonth);
-
-    schedule.push({
-      month: m,
-      emi: monthlyEMI,
-      principal: principalForMonth,
-      interest: interestForMonth,
-      balance: currentBalance,
-    });
+    schedule.push({ month: m, emi: monthlyEMI, principal: principalForMonth, interest: interestForMonth, balance: currentBalance });
   }
-
-  const totalRepayment = P + accumulatedInterest;
 
   return {
     loanAmount: P,
@@ -222,55 +289,43 @@ export function calculateEMI(
     moratoriumMonths: moratorium,
     monthlyEMI,
     totalInterest: accumulatedInterest,
-    totalRepayment,
+    totalRepayment: P + accumulatedInterest,
     schedule,
   };
 }
 
 /**
- * Deterministic 36-Month Growth Trajectory
- * Calculates realistic operating revenues, costs, margins, and break-even point
+ * Indicative 36-month operating trajectory. Category profiles materially change
+ * revenue ramp, cost intensity and working economics. A break-even value of 37
+ * means the model did not reach break-even within the displayed 36-month period.
  */
 export function calculateGrowthProjections(
   projectCost: number,
   monthlyEMI: number,
-  category: string
+  category: BusinessCategory = 'Other'
 ): GrowthProjectionData {
-  // Base monthly steady-state revenue estimate around 18-24% of project cost for rural micro-enterprises
-  const baseSteadyRevenue = Math.round(projectCost * 0.22);
-  const baseOperatingExpenseRate = 0.62; // 62% operating expenses (materials, power, labor)
-
+  const profile = getBusinessFinanceProfile(category);
+  const baseSteadyRevenue = Math.round(projectCost * profile.steadyRevenueRate);
   const monthlyData: GrowthDataPoint[] = [];
-  let cumulativeCash = -projectCost * 0.1; // initial margin outflow
-
+  let cumulativeCash = -projectCost * 0.1;
   let breakEvenMonth = 0;
 
   for (let m = 1; m <= 36; m++) {
-    // Ramp-up sigmoid curve from month 1 (45% capacity) to month 12 (100% capacity)
-    const rampFactor = m <= 12 ? 0.45 + (0.55 * (m - 1)) / 11 : 1.0 + (0.15 * (m - 12)) / 24;
+    const firstYearProgress = Math.min(1, (m - 1) / 11);
+    const laterProgress = m <= 12 ? 0 : (m - 12) / 24;
+    const rampFactor = m <= 12
+      ? profile.rampStart + (1 - profile.rampStart) * firstYearProgress
+      : 1 + profile.year3Growth * laterProgress;
+
     const revenue = Math.round(baseSteadyRevenue * rampFactor);
-    const expenses = Math.round(revenue * baseOperatingExpenseRate);
+    const expenses = Math.round(revenue * profile.operatingExpenseRate);
     const repayment = monthlyEMI;
     const netProfit = revenue - expenses - repayment;
     cumulativeCash += netProfit;
 
-    if (cumulativeCash > 0 && breakEvenMonth === 0) {
-      breakEvenMonth = m;
-    }
+    if (cumulativeCash >= 0 && breakEvenMonth === 0) breakEvenMonth = m;
 
-    monthlyData.push({
-      month: m,
-      label: `M${m}`,
-      revenue,
-      expenses,
-      profit: netProfit,
-      repayment,
-      cashFlow: cumulativeCash,
-    });
-  }
-
-  if (breakEvenMonth === 0) {
-    breakEvenMonth = 8; // fallback realistic break-even
+    monthlyData.push({ month: m, label: `M${m}`, revenue, expenses, profit: netProfit, repayment, cashFlow: cumulativeCash });
   }
 
   const matureMonth = monthlyData[18] || monthlyData[monthlyData.length - 1];
@@ -279,7 +334,7 @@ export function calculateGrowthProjections(
     monthlyData,
     projectedMonthlyRevenue: matureMonth.revenue,
     projectedMonthlyProfit: matureMonth.profit,
-    breakEvenMonths: breakEvenMonth,
+    breakEvenMonths: breakEvenMonth || 37,
     loanRepaymentMonthly: monthlyEMI,
     isIndicative: true,
   };
