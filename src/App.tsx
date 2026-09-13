@@ -348,13 +348,20 @@ export default function App() {
         isOpen={isVoiceOpen}
         onClose={() => setIsVoiceOpen(false)}
         context={{
-          businessIdea: formData.businessIdea,
+          businessIdea: formData.businessIdea || formData.ideaText,
           category: formData.category,
-          margin: formData.availableMargin,
+          margin: formData.availableMargin || formData.marginCapital,
           projectCost: financialData.totalProjectCost,
           loan: financialData.loanRequirement,
           scheme: financialData.recommendedScheme,
           language,
+          district: formData.location.district,
+          state: formData.location.state,
+          skill: formData.selectedExpertise,
+          landAcres: formData.availableLandAcres,
+          experience: formData.priorExperience,
+          risk: formData.riskWillingness,
+          targetMarket: formData.targetMarket,
         }}
       />
 
