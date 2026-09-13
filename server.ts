@@ -60,6 +60,54 @@ function createUserScopedClient(token: string) {
   });
 }
 
+const LANGUAGE_NAMES: Record<string, string> = {
+  en: 'English',
+  hi: 'Hindi',
+  bn: 'Bengali',
+  mr: 'Marathi',
+  ta: 'Tamil',
+  te: 'Telugu',
+  kn: 'Kannada',
+  gu: 'Gujarati',
+  pa: 'Punjabi',
+};
+
+const TTS_LANGUAGE_CODES: Record<string, string | undefined> = {
+  en: 'en-IN',
+  hi: 'hi-IN',
+  bn: 'bn-IN',
+  mr: 'mr-IN',
+  ta: 'ta-IN',
+  te: 'te-IN',
+  kn: 'kn-IN',
+  gu: 'gu-IN',
+  // Gemini TTS currently auto-detects Punjabi more reliably when languageCode is omitted.
+  pa: undefined,
+};
+
+function pcmToWav(pcm: Buffer, sampleRate = 24000, channels = 1, bitsPerSample = 16) {
+  const bytesPerSample = bitsPerSample / 8;
+  const blockAlign = channels * bytesPerSample;
+  const byteRate = sampleRate * blockAlign;
+  const header = Buffer.alloc(44);
+
+  header.write('RIFF', 0);
+  header.writeUInt32LE(36 + pcm.length, 4);
+  header.write('WAVE', 8);
+  header.write('fmt ', 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(channels, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(bitsPerSample, 34);
+  header.write('data', 36);
+  header.writeUInt32LE(pcm.length, 40);
+
+  return Buffer.concat([header, pcm]);
+}
+
 app.get('/api/health', (_req, res) => {
   res.json({
     status: 'ok',
@@ -190,20 +238,8 @@ app.post('/api/ai/chat', async (req, res) => {
     return res.status(400).json({ error: 'Question is required.' });
   }
 
-  const languageNames: Record<string, string> = {
-    en: 'English',
-    hi: 'Hindi',
-    bn: 'Bengali',
-    mr: 'Marathi',
-    ta: 'Tamil',
-    te: 'Telugu',
-    kn: 'Kannada',
-    gu: 'Gujarati',
-    pa: 'Punjabi',
-  };
-
   const languageCode = typeof context.language === 'string' ? context.language : 'en';
-  const languageName = languageNames[languageCode] || 'English';
+  const languageName = LANGUAGE_NAMES[languageCode] || 'English';
   const safeHistory = Array.isArray(history)
     ? history
         .slice(-10)
@@ -231,7 +267,7 @@ Estimated loan: ₹${context.loan ?? 'Not specified'}
 Current scheme recommendation: ${String(context.scheme || 'Not specified')}
 Risk preference: ${String(context.risk || 'Not specified')}
 Target market / customer route: ${String(context.targetMarket || 'Not specified')}
-UI language: ${languageName} (${languageCode})
+WEBSITE-SELECTED LANGUAGE: ${languageName} (${languageCode})
 
 RECENT CONVERSATION
 ${safeHistory || 'No previous turns.'}
@@ -240,22 +276,23 @@ CURRENT QUESTION
 ${question.trim()}
 
 RESPONSE RULES
-1. Reply in ${languageName}. If the user explicitly asks for another language in the current question, follow that request instead.
-2. Make the answer district-aware and skill-aware. Lucknow, Barabanki, Prayagraj, Sitapur, etc. should not receive copy-pasted advice. Use qualitative local reasoning unless verified data is actually available.
-3. Never invent precise local statistics, official scheme benefits, interest rates, eligibility thresholds, subsidy percentages, deadlines or government approvals. When uncertain, say what must be verified.
-4. Never promise loan sanction, subsidy, profit, demand or returns.
-5. Keep calculations internally consistent with the context. If you estimate, label it clearly as an estimate.
-6. Prefer concrete next actions over generic motivation. Mention customer route, pricing test, supplier check, working-capital reserve, licences or scheme verification when relevant.
-7. For "what should I do" questions, give a short prioritized action plan. For finance questions, break money into practical buckets. For scheme questions, explain likely-fit schemes to verify and why, not guaranteed eligibility.
-8. Use simple language suitable for a first-time entrepreneur. You may retain familiar business terms such as EMI, working capital, UPI, FSSAI, Udyam and GST where useful.
+1. The WEBSITE-SELECTED LANGUAGE is mandatory. Reply entirely in ${languageName}, even if the user typed the question in English or another language. Only switch languages when the user explicitly says something like "answer in English", "Hindi mein batao", or directly requests another language.
+2. Use the native script and natural vocabulary of ${languageName}. Keep only unavoidable names/acronyms such as NIRNAY AI, EMI, UPI, FSSAI, GST or Udyam in Latin script where appropriate.
+3. Make the answer district-aware and skill-aware. Lucknow, Barabanki, Prayagraj, Sitapur, etc. should not receive copy-pasted advice. Use qualitative local reasoning unless verified data is actually available.
+4. Never invent precise local statistics, official scheme benefits, interest rates, eligibility thresholds, subsidy percentages, deadlines or government approvals. When uncertain, say what must be verified.
+5. Never promise loan sanction, subsidy, profit, demand or returns.
+6. Keep calculations internally consistent with the context. If you estimate, label it clearly as an estimate.
+7. Prefer concrete next actions over generic motivation. Mention customer route, pricing test, supplier check, working-capital reserve, licences or scheme verification when relevant.
+8. For "what should I do" questions, give a short prioritized action plan. For finance questions, break money into practical buckets. For scheme questions, explain likely-fit schemes to verify and why, not guaranteed eligibility.
 9. Consider prior turns so follow-up questions feel connected. Do not repeat the entire previous answer.
-10. Keep the main answer useful but concise: normally 180–320 words, shorter for simple questions.
+10. If the user asks "What is NIRNAY AI?", "Explain NIRNAY AI", or similar, explain the platform comprehensively in ${languageName}: its purpose, entrepreneur inputs, skill/location-based business recommendations, financial structuring, scheme guidance, live map intelligence, multilingual text/voice assistant, account/data security, and its limitations. Do not answer only about the currently selected business.
+11. Keep the main answer useful but concise: normally 180–320 words, shorter for simple questions.
 
 Return JSON only:
 {
   "answer": "string with readable short headings/bullets when useful",
-  "followUps": ["3 short follow-up questions in the same language"],
-  "confidenceNote": "one short sentence explaining what is based on user context and what should be locally/officially verified"
+  "followUps": ["3 short follow-up questions in the same selected language"],
+  "confidenceNote": "one short sentence in the same selected language explaining what is based on user context and what should be locally/officially verified"
 }`;
 
     const response = await ai.models.generateContent({
@@ -284,6 +321,60 @@ Return JSON only:
   } catch (err) {
     console.error('Error in chat:', err);
     return res.json({ demoMode: true });
+  }
+});
+
+app.post('/api/ai/tts', async (req, res) => {
+  const auth = await getAuthenticatedUser(req);
+  const ai = getGemini();
+
+  if (!auth) return res.status(401).json({ error: 'Authentication required for AI voice.' });
+  if (!ai || !process.env.GEMINI_API_KEY) {
+    return res.status(503).json({ error: 'AI voice is unavailable because Gemini is not configured.' });
+  }
+
+  const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
+  const language = typeof req.body?.language === 'string' ? req.body.language : 'en';
+  if (!text) return res.status(400).json({ error: 'Text is required.' });
+
+  const languageName = LANGUAGE_NAMES[language] || 'English';
+  const languageCode = TTS_LANGUAGE_CODES[language];
+  const speechConfig: Record<string, unknown> = {
+    voiceConfig: {
+      prebuiltVoiceConfig: {
+        voiceName: 'Kore',
+      },
+    },
+  };
+  if (languageCode) speechConfig.languageCode = languageCode;
+
+  try {
+    const ttsPrompt = `Speak naturally, clearly and warmly in ${languageName}. Read only the answer below. Do not add commentary, do not summarize it, and do not translate it into English. Preserve the selected language, numbers and rupee amounts.\n\n${text.slice(0, 4200)}`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.1-flash-tts-preview',
+      contents: [{ parts: [{ text: ttsPrompt }] }],
+      config: {
+        responseModalities: ['AUDIO'],
+        speechConfig,
+      } as any,
+    });
+
+    const audioPart = response.candidates?.[0]?.content?.parts?.find(
+      (part: any) => Boolean(part?.inlineData?.data)
+    ) as any;
+    const base64Audio = audioPart?.inlineData?.data;
+    if (!base64Audio) throw new Error('Gemini TTS returned no audio data.');
+
+    const pcm = Buffer.from(base64Audio, 'base64');
+    const wav = pcmToWav(pcm);
+    res.setHeader('Content-Type', 'audio/wav');
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Nirnay-Voice-Engine', 'gemini-3.1-flash-tts-preview');
+    return res.send(wav);
+  } catch (err) {
+    console.error('Error generating multilingual AI voice:', err);
+    return res.status(502).json({ error: 'AI voice generation failed.' });
   }
 });
 
