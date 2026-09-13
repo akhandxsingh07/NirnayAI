@@ -1,10 +1,15 @@
+# yaml-language-server: $schema=https://render.com/schema/render.yaml.json
+
 services:
   - type: web
     name: nirnay-ai
     runtime: node
+    plan: free
+    autoDeployTrigger: commit
     buildCommand: npm install --include=dev --no-audit --no-fund && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
+    maxShutdownDelaySeconds: 30
     envVars:
       - key: NODE_ENV
         value: production
