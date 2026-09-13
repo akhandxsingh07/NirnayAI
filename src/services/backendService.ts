@@ -21,10 +21,7 @@ export async function saveAssessmentBundle(
   analysis: PersistedAnalysisPayload,
   financial: FinancialStructureData
 ): Promise<string | null> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
 
   const { data: assessment, error: assessmentError } = await supabase
@@ -50,12 +47,10 @@ export async function saveAssessmentBundle(
     .single();
 
   if (assessmentError || !assessment) {
-    console.warn('Could not persist assessment:', assessmentError?.message);
-    return null;
+    throw new Error(assessmentError?.message || 'Could not save assessment.');
   }
 
   const assessmentId = assessment.id as string;
-
   const [analysisResult, financeResult] = await Promise.all([
     supabase.from('ai_analyses').insert({
       assessment_id: assessmentId,
@@ -79,8 +74,18 @@ export async function saveAssessmentBundle(
     }),
   ]);
 
-  if (analysisResult.error) console.warn('Could not persist AI analysis:', analysisResult.error.message);
-  if (financeResult.error) console.warn('Could not persist financial plan:', financeResult.error.message);
+  if (analysisResult.error || financeResult.error) {
+    // Avoid presenting a partially persisted assessment as complete. Existing
+    // FK cascades remove child rows/action tasks when the assessment is deleted.
+    const { error: cleanupError } = await supabase
+      .from('business_assessments')
+      .delete()
+      .eq('id', assessmentId)
+      .eq('user_id', user.id);
+
+    if (cleanupError) console.warn('Could not clean up partial assessment bundle:', cleanupError.message);
+    throw new Error(analysisResult.error?.message || financeResult.error?.message || 'Could not save complete assessment bundle.');
+  }
 
   return assessmentId;
 }
@@ -91,9 +96,7 @@ export async function saveBusinessReport(
   language: string,
   reportData: unknown
 ): Promise<void> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) return;
 
   const { error } = await supabase.from('reports').insert({
@@ -103,8 +106,7 @@ export async function saveBusinessReport(
     language,
     report_data: reportData,
   });
-
-  if (error) console.warn('Could not persist report:', error.message);
+  if (error) throw new Error(error.message);
 }
 
 export async function getAdminStats(): Promise<{
@@ -120,6 +122,9 @@ export async function getAdminStats(): Promise<{
     supabase.from('ai_analyses').select('id', { count: 'exact', head: true }),
   ]);
 
+  const firstError = citizens.error || assessments.error || reports.error || analyses.error;
+  if (firstError) throw new Error(firstError.message);
+
   return {
     citizens: citizens.count || 0,
     assessments: assessments.count || 0,
@@ -133,11 +138,11 @@ export async function getRecentAdminActivity(): Promise<Array<{
   entity_type: string | null;
   created_at: string;
 }>> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('admin_activity')
     .select('action, entity_type, created_at')
     .order('created_at', { ascending: false })
     .limit(8);
-
+  if (error) throw new Error(error.message);
   return data || [];
 }
