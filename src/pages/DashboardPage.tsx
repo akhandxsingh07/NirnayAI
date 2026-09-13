@@ -9,7 +9,13 @@ import {
 } from '../types';
 import { formatINR } from '../utils/financialCalculations';
 import { demoT } from '../services/demoLocalization';
-import { DEMO_CITIES, DemoCityId } from '../utils/demoScenarios';
+import {
+  DEMO_BUSINESSES,
+  DEMO_CITIES,
+  DemoBusinessId,
+  DemoCityId,
+  getDemoBusinessLabel,
+} from '../utils/demoScenarios';
 import {
   LayoutDashboard,
   Sparkles,
@@ -23,6 +29,7 @@ import {
   MapPin,
   Lightbulb,
   ShieldCheck,
+  BriefcaseBusiness,
 } from 'lucide-react';
 
 interface DashboardPageProps {
@@ -31,8 +38,11 @@ interface DashboardPageProps {
   financialData: FinancialStructureData;
   growthData: GrowthProjectionData;
   onNavigate: (page: PageId) => void;
-  onTryDemo: (cityId?: DemoCityId) => void;
+  onTryDemo: (cityId?: DemoCityId, businessId?: DemoBusinessId) => void;
   selectedDemoCity: DemoCityId;
+  selectedDemoBusiness: DemoBusinessId;
+  onDemoCityChange: (cityId: DemoCityId) => void;
+  onDemoBusinessChange: (businessId: DemoBusinessId) => void;
   onOpenVoice: () => void;
   onOpenHelp: () => void;
   language: LanguageCode;
@@ -46,11 +56,15 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   onNavigate,
   onTryDemo,
   selectedDemoCity,
+  selectedDemoBusiness,
+  onDemoCityChange,
+  onDemoBusinessChange,
   onOpenVoice,
   language,
 }) => {
   const locString = `${formData.location.village}, ${formData.location.district} (${formData.location.state})`;
   const selectedCity = DEMO_CITIES.find((city) => city.id === selectedDemoCity) || DEMO_CITIES[0];
+  const selectedBusinessLabel = getDemoBusinessLabel(selectedDemoBusiness, language);
 
   const cards = [
     {
@@ -90,7 +104,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   return (
     <div className="space-y-6 py-2">
       <section className="overflow-hidden rounded-3xl border border-[#D9B99B]/40 bg-white shadow-xs">
-        <div className="grid gap-6 p-6 sm:p-8 lg:grid-cols-[1fr_auto] lg:items-center">
+        <div className="grid gap-6 p-6 sm:p-8 lg:grid-cols-[1fr_300px] lg:items-center">
           <div>
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-2 rounded-full bg-[#F4E9DA] px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider text-[#6B4535]">
@@ -99,6 +113,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-full bg-[#EEF1E5] px-3 py-1 text-[11px] font-bold text-[#59603F]">
                 <MapPin className="h-3.5 w-3.5" /> {formData.location.district}
+              </span>
+              <span className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-[#F5EEE6] px-3 py-1 text-[11px] font-bold text-[#6B4535]">
+                <BriefcaseBusiness className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{formData.category}</span>
               </span>
             </div>
 
@@ -131,16 +149,53 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             </div>
           </div>
 
-          <div className="min-w-[220px] rounded-2xl border border-[#D9B99B]/60 bg-[#FAF7F3] p-4">
-            <div className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-[#8B5E47]">{demoT('selectCity', language)}</div>
-            <div className="mt-1 text-lg font-black text-[#2B1B16]">{selectedCity.label}</div>
+          <div className="rounded-2xl border border-[#D9B99B]/60 bg-[#FAF7F3] p-4">
+            <div className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-[#8B5E47]">{demoT('tryDemo', language)}</div>
             <p className="mt-1 text-[11px] leading-relaxed text-[#765849]">{demoT('cityDemoHint', language)}</p>
+
+            <div className="mt-3 space-y-2.5">
+              <label className="block">
+                <span className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-[#8B5E47]">{demoT('selectCity', language)}</span>
+                <div className="flex items-center gap-2 rounded-xl border border-[#D9B99B]/70 bg-white px-3 py-2.5">
+                  <MapPin className="h-3.5 w-3.5 shrink-0 text-[#B9825B]" />
+                  <select
+                    value={selectedDemoCity}
+                    onChange={(e) => onDemoCityChange(e.target.value as DemoCityId)}
+                    className="w-full bg-transparent text-xs font-extrabold text-[#4A2F24] outline-none"
+                  >
+                    {DEMO_CITIES.map((city) => <option key={city.id} value={city.id}>{city.label}</option>)}
+                  </select>
+                </div>
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-[10px] font-extrabold uppercase tracking-wider text-[#8B5E47]">{demoT('selectBusiness', language)}</span>
+                <div className="flex items-center gap-2 rounded-xl border border-[#D9B99B]/70 bg-white px-3 py-2.5">
+                  <BriefcaseBusiness className="h-3.5 w-3.5 shrink-0 text-[#6F7655]" />
+                  <select
+                    value={selectedDemoBusiness}
+                    onChange={(e) => onDemoBusinessChange(e.target.value as DemoBusinessId)}
+                    className="w-full bg-transparent text-xs font-extrabold text-[#4A2F24] outline-none"
+                  >
+                    {DEMO_BUSINESSES.map((business) => (
+                      <option key={business.id} value={business.id}>{business.labels[language] || business.labels.en}</option>
+                    ))}
+                  </select>
+                </div>
+              </label>
+            </div>
+
+            <div className="mt-3 rounded-xl bg-[#EEF1E5] px-3 py-2 text-[11px] font-bold leading-relaxed text-[#59603F]">
+              {selectedCity.label} · {selectedBusinessLabel}
+            </div>
+            <p className="mt-2 text-[10px] leading-relaxed text-[#8B6D5D]">{demoT('businessDemoHint', language)}</p>
+
             <button
-              onClick={() => onTryDemo(selectedDemoCity)}
+              onClick={() => onTryDemo(selectedDemoCity, selectedDemoBusiness)}
               className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#D9B99B]/70 bg-white px-3 py-2 text-xs font-extrabold text-[#6B4535] transition hover:bg-[#F3E8DC]"
             >
               <Play className="h-3.5 w-3.5 fill-[#B9825B] text-[#B9825B]" />
-              {demoT('resetDemo', language)} · {selectedCity.label}
+              {demoT('resetDemo', language)}
             </button>
           </div>
         </div>
