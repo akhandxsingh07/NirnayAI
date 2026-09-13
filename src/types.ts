@@ -61,6 +61,8 @@ export interface AssessmentFormData {
   targetMarket?: string;
   priorExperience?: 'None' | 'Some' | 'Experienced';
   riskWillingness?: 'Low' | 'Medium' | 'High';
+  selectedExpertise?: string;
+  availableLandAcres?: number;
 }
 
 export interface FinancialStructureData {
@@ -178,36 +180,17 @@ export interface EMIResult {
 }
 
 export interface GrowthDataPoint {
-  month: number;
-  label: string;
+  month: string;
   revenue: number;
   expenses: number;
   profit: number;
-  repayment: number;
-  cashFlow: number;
 }
 
 export interface GrowthProjectionData {
-  monthlyData: GrowthDataPoint[];
   projectedMonthlyRevenue: number;
+  projectedMonthlyExpenses: number;
   projectedMonthlyProfit: number;
   breakEvenMonths: number;
-  loanRepaymentMonthly: number;
-  isIndicative: boolean;
-}
-
-export interface BusinessPlanReport {
-  generatedAt: string;
-  businessIdea: string;
-  category: BusinessCategory;
-  location: LocationData;
-  opportunitySummary: string;
-  feasibilityScore: number;
-  feasibilityLabel: string;
-  financialStructure: FinancialPlanData;
-  recommendedScheme: SchemeOption;
-  monthlyEMI: number;
-  keyRisks: string[];
-  mitigations: string[];
-  nextSteps: string[];
+  monthlyGrowthRate: number;
+  projection: GrowthDataPoint[];
 }
