@@ -178,30 +178,106 @@ app.post('/api/ai/chat', async (req, res) => {
     return res.json({ demoMode: true, requiresGeminiKey: true });
   }
 
-  const { question, context } = req.body;
+  const { question, context = {}, history = [] } = req.body as {
+    question?: string;
+    context?: Record<string, unknown>;
+    history?: Array<{ role?: string; text?: string }>;
+  };
+
+  if (!question || typeof question !== 'string' || question.trim().length === 0) {
+    return res.status(400).json({ error: 'Question is required.' });
+  }
+
+  const languageNames: Record<string, string> = {
+    en: 'English',
+    hi: 'Hindi',
+    bn: 'Bengali',
+    mr: 'Marathi',
+    ta: 'Tamil',
+    te: 'Telugu',
+    kn: 'Kannada',
+    gu: 'Gujarati',
+    pa: 'Punjabi',
+  };
+
+  const languageCode = typeof context.language === 'string' ? context.language : 'en';
+  const languageName = languageNames[languageCode] || 'English';
+  const safeHistory = Array.isArray(history)
+    ? history
+        .slice(-10)
+        .filter((item) => item && (item.role === 'user' || item.role === 'assistant') && typeof item.text === 'string')
+        .map((item) => `${item.role === 'user' ? 'Entrepreneur' : 'NIRNAY AI'}: ${String(item.text).slice(0, 1200)}`)
+        .join('\n')
+    : '';
 
   try {
-    const prompt = `You are NIRNAY AI advisory assistant for rural micro-entrepreneurs in India.
-Business: ${context?.businessIdea || 'Rural enterprise'}
-Category: ${context?.category || 'General'}
-Committed Margin: ₹${context?.margin || 50000}
-Total Project Cost: ₹${context?.projectCost || 500000}
-Loan Support: ₹${context?.loan || 450000}
-Scheme: ${context?.scheme || 'Term Loan Scheme'}
-Language: ${context?.language || 'en'}
+    const prompt = `You are NIRNAY AI, a practical decision-support copilot for rural and semi-urban micro-entrepreneurs in India.
 
-User Question: "${question}"
+Your job is broader than answering generic questions. Use the entrepreneur's current profile, location and prior conversation to give an actionable answer on business selection, customer acquisition, pricing, operations, cash flow, loan structure, government schemes, compliance, risk control and 30/60/90-day execution.
 
-Reply in the requested language using plain, practical language under 150 words. Keep financial figures internally consistent and avoid claiming guaranteed approvals or returns.`;
+ENTREPRENEUR CONTEXT
+Business: ${String(context.businessIdea || 'Not specified')}
+Category: ${String(context.category || 'Not specified')}
+District: ${String(context.district || 'Not specified')}
+State: ${String(context.state || 'Not specified')}
+Selected skill: ${String(context.skill || 'Not specified')}
+Experience: ${String(context.experience || 'Not specified')}
+Available land: ${context.landAcres ?? 'Not specified'} acres
+Available margin: ₹${context.margin ?? 'Not specified'}
+Estimated project cost: ₹${context.projectCost ?? 'Not specified'}
+Estimated loan: ₹${context.loan ?? 'Not specified'}
+Current scheme recommendation: ${String(context.scheme || 'Not specified')}
+Risk preference: ${String(context.risk || 'Not specified')}
+Target market / customer route: ${String(context.targetMarket || 'Not specified')}
+UI language: ${languageName} (${languageCode})
+
+RECENT CONVERSATION
+${safeHistory || 'No previous turns.'}
+
+CURRENT QUESTION
+${question.trim()}
+
+RESPONSE RULES
+1. Reply in ${languageName}. If the user explicitly asks for another language in the current question, follow that request instead.
+2. Make the answer district-aware and skill-aware. Lucknow, Barabanki, Prayagraj, Sitapur, etc. should not receive copy-pasted advice. Use qualitative local reasoning unless verified data is actually available.
+3. Never invent precise local statistics, official scheme benefits, interest rates, eligibility thresholds, subsidy percentages, deadlines or government approvals. When uncertain, say what must be verified.
+4. Never promise loan sanction, subsidy, profit, demand or returns.
+5. Keep calculations internally consistent with the context. If you estimate, label it clearly as an estimate.
+6. Prefer concrete next actions over generic motivation. Mention customer route, pricing test, supplier check, working-capital reserve, licences or scheme verification when relevant.
+7. For "what should I do" questions, give a short prioritized action plan. For finance questions, break money into practical buckets. For scheme questions, explain likely-fit schemes to verify and why, not guaranteed eligibility.
+8. Use simple language suitable for a first-time entrepreneur. You may retain familiar business terms such as EMI, working capital, UPI, FSSAI, Udyam and GST where useful.
+9. Consider prior turns so follow-up questions feel connected. Do not repeat the entire previous answer.
+10. Keep the main answer useful but concise: normally 180–320 words, shorter for simple questions.
+
+Return JSON only:
+{
+  "answer": "string with readable short headings/bullets when useful",
+  "followUps": ["3 short follow-up questions in the same language"],
+  "confidenceNote": "one short sentence explaining what is based on user context and what should be locally/officially verified"
+}`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
+      config: { responseMimeType: 'application/json' },
     });
 
+    const parsed = JSON.parse(response.text || '{}') as {
+      answer?: string;
+      followUps?: string[];
+      confidenceNote?: string;
+    };
+
+    if (!parsed.answer) throw new Error('Gemini returned an empty chat answer.');
+
     return res.json({
-      answer: response.text,
-      sources: ['NIRNAY AI Advisory Engine'],
+      answer: parsed.answer,
+      followUps: Array.isArray(parsed.followUps) ? parsed.followUps.slice(0, 4) : [],
+      confidenceNote: parsed.confidenceNote || '',
+      sources: [
+        'NIRNAY AI advisory context',
+        context.district ? `Entrepreneur profile: ${String(context.district)}` : 'Entrepreneur profile',
+      ],
     });
   } catch (err) {
     console.error('Error in chat:', err);
