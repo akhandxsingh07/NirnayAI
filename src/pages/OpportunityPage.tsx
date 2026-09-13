@@ -1,6 +1,7 @@
 import React from 'react';
 import { AssessmentFormData, LocalOpportunityData, PageId, LanguageCode } from '../types';
 import { LiveMarketMap } from '../components/LiveMarketMap';
+import { LiveIntelligencePanel } from '../components/LiveIntelligencePanel';
 import { EvidenceBadge, EvidenceLegendBar } from '../components/EvidenceBadge';
 import { t } from '../services/localizationService';
 import {
@@ -62,6 +63,15 @@ export const OpportunityPage: React.FC<OpportunityPageProps> = ({
           language={language}
         />
       </section>
+
+      <LiveIntelligencePanel
+        district={formData.location.district}
+        state={formData.location.state}
+        category={formData.category}
+        latitude={formData.location.latitude}
+        longitude={formData.location.longitude}
+        language={language}
+      />
 
       <section className="space-y-4">
         <h2 className="text-sm font-bold text-[#2B1B16] uppercase tracking-wider">
