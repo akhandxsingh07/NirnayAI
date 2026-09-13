@@ -11,16 +11,16 @@ import {
   CitizenSession,
 } from './types';
 import {
-  DEMO_FEASIBILITY_SCORE,
-  DEMO_SWOT,
-  DEMO_AI_INSIGHTS,
-} from './utils/demoData';
-import {
+  DEFAULT_DEMO_BUSINESS,
   DEFAULT_DEMO_CITY,
+  DemoBusinessId,
   DemoCityId,
   buildDemoAssessment,
+  buildDemoFeasibility,
+  buildDemoInsights,
   buildDemoOpportunity,
-  getDemoCity,
+  buildDemoRecommendation,
+  buildDemoSwot,
 } from './utils/demoScenarios';
 import {
   calculateFinancialStructure,
@@ -68,6 +68,7 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState<PageId>('landing');
   const [language, setLanguage] = useState<LanguageCode>('en');
   const [selectedDemoCity, setSelectedDemoCity] = useState<DemoCityId>(DEFAULT_DEMO_CITY);
+  const [selectedDemoBusiness, setSelectedDemoBusiness] = useState<DemoBusinessId>(DEFAULT_DEMO_BUSINESS);
   const [citizenSession, setCitizenSession] = useState<CitizenSession | null>(() => {
     try {
       return JSON.parse(localStorage.getItem(CITIZEN_SESSION_KEY) || 'null') as CitizenSession | null;
@@ -76,13 +77,23 @@ export default function App() {
     }
   });
 
-  const [formData, setFormData] = useState<AssessmentFormData>(() => buildDemoAssessment(DEFAULT_DEMO_CITY, 'en'));
-  const [feasibilityScore, setFeasibilityScore] = useState<FeasibilityScoreData>(DEMO_FEASIBILITY_SCORE);
-  const [swot, setSwot] = useState<SWOTData>(DEMO_SWOT);
-  const [insights, setInsights] = useState(DEMO_AI_INSIGHTS);
-  const [opportunityData, setOpportunityData] = useState<LocalOpportunityData>(() => buildDemoOpportunity(DEFAULT_DEMO_CITY));
-  const [recommendation, setRecommendation] = useState<string>(
-    'This demo business shows promising recurring local demand. Validate supplier reliability, customer contracts and cold-chain costs before investing.'
+  const [formData, setFormData] = useState<AssessmentFormData>(() =>
+    buildDemoAssessment(DEFAULT_DEMO_CITY, DEFAULT_DEMO_BUSINESS, 'en')
+  );
+  const [feasibilityScore, setFeasibilityScore] = useState<FeasibilityScoreData>(() =>
+    buildDemoFeasibility(DEFAULT_DEMO_CITY, DEFAULT_DEMO_BUSINESS, 'en')
+  );
+  const [swot, setSwot] = useState<SWOTData>(() =>
+    buildDemoSwot(DEFAULT_DEMO_CITY, DEFAULT_DEMO_BUSINESS, 'en')
+  );
+  const [insights, setInsights] = useState(() =>
+    buildDemoInsights(DEFAULT_DEMO_CITY, DEFAULT_DEMO_BUSINESS, 'en')
+  );
+  const [opportunityData, setOpportunityData] = useState<LocalOpportunityData>(() =>
+    buildDemoOpportunity(DEFAULT_DEMO_CITY, DEFAULT_DEMO_BUSINESS, 'en')
+  );
+  const [recommendation, setRecommendation] = useState<string>(() =>
+    buildDemoRecommendation(DEFAULT_DEMO_CITY, DEFAULT_DEMO_BUSINESS, 'en')
   );
   const [isAiGenerated, setIsAiGenerated] = useState<boolean>(false);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
@@ -124,24 +135,28 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleTryDemo = (cityId: DemoCityId = selectedDemoCity) => {
-    const city = getDemoCity(cityId);
+  const handleTryDemo = (
+    cityId: DemoCityId = selectedDemoCity,
+    businessId: DemoBusinessId = selectedDemoBusiness
+  ) => {
     setSelectedDemoCity(cityId);
-    setFormData(buildDemoAssessment(cityId, language));
-    setFeasibilityScore(DEMO_FEASIBILITY_SCORE);
-    setSwot(DEMO_SWOT);
-    setInsights(DEMO_AI_INSIGHTS);
-    setOpportunityData(buildDemoOpportunity(cityId));
-    setRecommendation(
-      `The ${city.district} demo shows promising recurring local demand for organized dairy supply. Validate customer contracts, supplier reliability and operating costs through a field survey before investing.`
-    );
+    setSelectedDemoBusiness(businessId);
+    setFormData(buildDemoAssessment(cityId, businessId, language));
+    setFeasibilityScore(buildDemoFeasibility(cityId, businessId, language));
+    setSwot(buildDemoSwot(cityId, businessId, language));
+    setInsights(buildDemoInsights(cityId, businessId, language));
+    setOpportunityData(buildDemoOpportunity(cityId, businessId, language));
+    setRecommendation(buildDemoRecommendation(cityId, businessId, language));
     setIsAiGenerated(false);
     navigateTo('dashboard');
   };
 
   const handleDemoCityChange = (cityId: DemoCityId) => {
-    setSelectedDemoCity(cityId);
-    handleTryDemo(cityId);
+    handleTryDemo(cityId, selectedDemoBusiness);
+  };
+
+  const handleDemoBusinessChange = (businessId: DemoBusinessId) => {
+    handleTryDemo(selectedDemoCity, businessId);
   };
 
   const handleAssessmentSubmit = async (newForm: AssessmentFormData) => {
@@ -210,7 +225,9 @@ export default function App() {
             onOpenHelp={() => setIsHelpOpen(true)}
             onTryDemo={handleTryDemo}
             selectedDemoCity={selectedDemoCity}
+            selectedDemoBusiness={selectedDemoBusiness}
             onDemoCityChange={handleDemoCityChange}
+            onDemoBusinessChange={handleDemoBusinessChange}
             onToggleMobileMenu={() => setIsMobileMenuOpen(true)}
           />
         )}
@@ -228,7 +245,7 @@ export default function App() {
               onNavigate={navigateTo}
               language={language}
               onLanguageChange={setLanguage}
-              onTryDemo={() => handleTryDemo(selectedDemoCity)}
+              onTryDemo={() => handleTryDemo(selectedDemoCity, selectedDemoBusiness)}
               onOpenHelp={() => setIsHelpOpen(true)}
             />
           )}
@@ -257,6 +274,9 @@ export default function App() {
               onNavigate={navigateTo}
               onTryDemo={handleTryDemo}
               selectedDemoCity={selectedDemoCity}
+              selectedDemoBusiness={selectedDemoBusiness}
+              onDemoCityChange={handleDemoCityChange}
+              onDemoBusinessChange={handleDemoBusinessChange}
               onOpenVoice={() => setIsVoiceOpen(true)}
               onOpenHelp={() => setIsHelpOpen(true)}
               language={language}
