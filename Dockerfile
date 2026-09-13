@@ -2,8 +2,6 @@ FROM node:20-alpine AS build
 
 WORKDIR /app
 
-# Use package.json as the source of truth because the current lockfile is older
-# than a few recently-added dependencies. A normal npm install refreshes it.
 COPY package.json ./
 RUN npm install --include=dev --no-audit --no-fund
 
@@ -18,6 +16,7 @@ ENV NODE_ENV=production
 COPY package.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/dist-server ./dist-server
 
 USER node
 EXPOSE 3000
