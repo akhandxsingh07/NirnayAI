@@ -1,6 +1,8 @@
-import type { Express, Request, Response } from 'express';
+import type { Express, Request, Response, NextFunction } from 'express';
 
 type PlaceKind = 'competitor' | 'customer' | 'opportunity';
+type CacheEntry<T> = { expiresAt: number; value: T };
+type Selector = { key: string; values: string[] };
 
 type LivePlace = {
   id: string;
@@ -14,12 +16,7 @@ type LivePlace = {
 };
 
 type LiveMapPayload = {
-  center: {
-    lat: number;
-    lng: number;
-    label: string;
-    source: 'live-location' | 'district';
-  };
+  center: { lat: number; lng: number; label: string; source: 'live-location' | 'district' };
   radiusKm: number;
   updatedAt: string;
   places: LivePlace[];
@@ -33,156 +30,6 @@ type LiveMapPayload = {
   };
   coverageNote: string;
 };
-
-type CacheEntry<T> = { expiresAt: number; value: T };
-const MAP_CACHE_TTL_MS = 5 * 60 * 1000;
-const INTELLIGENCE_CACHE_TTL_MS = 10 * 60 * 1000;
-const cache = new Map<string, CacheEntry<LiveMapPayload>>();
-const intelligenceCache = new Map<string, CacheEntry<LiveIntelligencePayload>>();
-
-const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-
-function toRadians(value: number) {
-  return (value * Math.PI) / 180;
-}
-
-function distanceKm(lat1: number, lng1: number, lat2: number, lng2: number) {
-  const earthKm = 6371;
-  const dLat = toRadians(lat2 - lat1);
-  const dLng = toRadians(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(dLng / 2) ** 2;
-  return earthKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-type Selector = { key: string; values: string[] };
-
-function competitorSelectors(category: string): Selector[] {
-  const normalized = category.toLowerCase();
-  if (normalized.includes('dairy')) return [{ key: 'shop', values: ['dairy'] }];
-  if (normalized.includes('food')) return [
-    { key: 'shop', values: ['bakery', 'deli'] },
-    { key: 'craft', values: ['bakery'] },
-  ];
-  if (normalized.includes('retail')) return [{ key: 'shop', values: ['convenience', 'supermarket', 'general'] }];
-  if (normalized.includes('agriculture')) return [
-    { key: 'shop', values: ['agrarian', 'farm'] },
-    { key: 'craft', values: ['agricultural_engines'] },
-  ];
-  if (normalized.includes('poultry')) return [{ key: 'shop', values: ['butcher'] }];
-  if (normalized.includes('tailor')) return [
-    { key: 'craft', values: ['tailor'] },
-    { key: 'shop', values: ['clothes', 'fabric'] },
-  ];
-  if (normalized.includes('handicraft')) return [{ key: 'shop', values: ['craft', 'gift'] }];
-  if (normalized.includes('repair')) return [
-    { key: 'shop', values: ['mobile_phone', 'electronics', 'car_repair', 'bicycle'] },
-    { key: 'craft', values: ['electrician'] },
-  ];
-  if (normalized.includes('manufacturing')) return [{ key: 'landuse', values: ['industrial'] }];
-  return [{ key: 'shop', values: ['convenience', 'supermarket', 'general'] }];
-}
-
-const CUSTOMER_SELECTORS: Selector[] = [
-  { key: 'amenity', values: ['marketplace', 'school', 'college', 'hospital', 'clinic', 'bank', 'bus_station'] },
-  { key: 'shop', values: ['supermarket', 'convenience', 'mall'] },
-];
-
-const OPPORTUNITY_SELECTORS: Selector[] = [
-  { key: 'amenity', values: ['marketplace'] },
-  { key: 'landuse', values: ['industrial', 'commercial'] },
-];
-
-function matches(tags: Record<string, string>, selectors: Selector[]) {
-  return selectors.some((selector) => selector.values.includes(tags[selector.key]));
-}
-
-function escapeRegex(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function selectorToOverpass(selector: Selector, radius: number, lat: number, lng: number) {
-  const regex = selector.values.map(escapeRegex).join('|');
-  return `nwr(around:${radius},${lat},${lng})["${selector.key}"~"^(${regex})$"];`;
-}
-
-function readableCategory(tags: Record<string, string>) {
-  const raw = tags.shop || tags.amenity || tags.craft || tags.landuse || tags.tourism || 'place';
-  return raw.replaceAll('_', ' ');
-}
-
-function readableName(tags: Record<string, string>) {
-  return tags.name || tags.brand || tags.operator || readableCategory(tags).replace(/\b\w/g, (m) => m.toUpperCase());
-}
-
-async function geocodeDistrict(district: string, state: string) {
-  const query = [district, state, 'India'].filter(Boolean).join(', ');
-  const url = new URL('https://nominatim.openstreetmap.org/search');
-  url.searchParams.set('format', 'jsonv2');
-  url.searchParams.set('limit', '1');
-  url.searchParams.set('countrycodes', 'in');
-  url.searchParams.set('q', query);
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 9000);
-  try {
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'NirnayAI/1.0 (+https://github.com/akhandxsingh07/NirnayAI)',
-        'Accept-Language': 'en-IN,en;q=0.8',
-      },
-      signal: controller.signal,
-    });
-    if (!response.ok) throw new Error(`Geocoding failed with ${response.status}`);
-    const rows = (await response.json()) as Array<{ lat?: string; lon?: string; display_name?: string }>;
-    const first = rows[0];
-    if (!first?.lat || !first?.lon) return null;
-    return {
-      lat: Number(first.lat),
-      lng: Number(first.lon),
-      label: first.display_name || query,
-    };
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-async function fetchOverpass(lat: number, lng: number, radiusMeters: number, category: string) {
-  const selectors = [...competitorSelectors(category), ...CUSTOMER_SELECTORS, ...OPPORTUNITY_SELECTORS];
-  const unique = new Map(selectors.map((selector) => [`${selector.key}:${selector.values.join(',')}`, selector]));
-  const body = Array.from(unique.values())
-    .map((selector) => selectorToOverpass(selector, radiusMeters, lat, lng))
-    .join('\n');
-
-  const query = `[out:json][timeout:18];\n(\n${body}\n);\nout center tags;`;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20000);
-  try {
-    const response = await fetch('https://overpass-api.de/api/interpreter', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
-        'User-Agent': 'NirnayAI/1.0 (+https://github.com/akhandxsingh07/NirnayAI)',
-      },
-      body: new URLSearchParams({ data: query }).toString(),
-      signal: controller.signal,
-    });
-    if (!response.ok) throw new Error(`Map data failed with ${response.status}`);
-    return (await response.json()) as {
-      elements?: Array<{
-        type: string;
-        id: number;
-        lat?: number;
-        lon?: number;
-        center?: { lat?: number; lon?: number };
-        tags?: Record<string, string>;
-      }>;
-    };
-  } finally {
-    clearTimeout(timeout);
-  }
-}
 
 type WeatherDay = {
   date: string;
@@ -234,18 +81,157 @@ type LiveIntelligencePayload = {
     coverage: 'district' | 'state' | 'none';
     records: MandiRecord[];
     source: string;
+    unit: '₹/quintal';
     note: string;
   };
-  schemes: {
-    source: string;
-    verificationUrl: string;
-    note: string;
-  };
+  schemes: { source: string; verificationUrl: string; note: string };
 };
 
+const MAP_CACHE_TTL_MS = 5 * 60 * 1000;
+const INTELLIGENCE_CACHE_TTL_MS = 10 * 60 * 1000;
 const OGD_MANDI_RESOURCE_ID = '9ef84268-d588-465a-a308-a864a43d0070';
+const mapCache = new Map<string, CacheEntry<LiveMapPayload>>();
+const intelligenceCache = new Map<string, CacheEntry<LiveIntelligencePayload>>();
+const publicRequestBuckets = new Map<string, { count: number; resetAt: number }>();
+
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+function publicRateLimit(req: Request, res: Response, next: NextFunction) {
+  const now = Date.now();
+  const key = req.ip || req.socket.remoteAddress || 'unknown';
+  const bucket = publicRequestBuckets.get(key);
+  if (!bucket || bucket.resetAt <= now) {
+    publicRequestBuckets.set(key, { count: 1, resetAt: now + 60_000 });
+    return next();
+  }
+  if (bucket.count >= 45) {
+    res.setHeader('Retry-After', String(Math.ceil((bucket.resetAt - now) / 1000)));
+    return res.status(429).json({ error: 'Too many live-data requests. Please retry shortly.' });
+  }
+  bucket.count += 1;
+  if (publicRequestBuckets.size > 3000) {
+    for (const [bucketKey, value] of publicRequestBuckets) {
+      if (value.resetAt <= now) publicRequestBuckets.delete(bucketKey);
+    }
+  }
+  return next();
+}
+
+function toRadians(value: number) {
+  return (value * Math.PI) / 180;
+}
+
+function distanceKm(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const earthKm = 6371;
+  const dLat = toRadians(lat2 - lat1);
+  const dLng = toRadians(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(dLng / 2) ** 2;
+  return earthKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function competitorSelectors(category: string): Selector[] {
+  const c = category.toLowerCase();
+  if (c.includes('dairy')) return [{ key: 'shop', values: ['dairy'] }];
+  if (c.includes('food')) return [{ key: 'shop', values: ['bakery', 'deli', 'confectionery'] }, { key: 'craft', values: ['bakery'] }];
+  if (c.includes('retail')) return [{ key: 'shop', values: ['convenience', 'supermarket', 'general'] }];
+  if (c.includes('agriculture')) return [{ key: 'shop', values: ['agrarian', 'farm'] }, { key: 'craft', values: ['agricultural_engines'] }];
+  if (c.includes('poultry')) return [{ key: 'shop', values: ['butcher', 'farm'] }];
+  if (c.includes('tailor')) return [{ key: 'craft', values: ['tailor'] }, { key: 'shop', values: ['clothes', 'fabric'] }];
+  if (c.includes('handicraft')) return [{ key: 'shop', values: ['craft', 'gift'] }];
+  if (c.includes('repair') || c.includes('electrical')) return [
+    { key: 'shop', values: ['mobile_phone', 'electronics', 'car_repair', 'bicycle', 'computer'] },
+    { key: 'craft', values: ['electrician', 'electronics_repair'] },
+  ];
+  if (c.includes('manufacturing') || c.includes('carpentry')) return [{ key: 'landuse', values: ['industrial'] }, { key: 'craft', values: ['carpenter'] }];
+  if (c.includes('digital') || c.includes('it')) return [{ key: 'shop', values: ['computer', 'mobile_phone'] }, { key: 'office', values: ['it', 'company'] }];
+  return [{ key: 'shop', values: ['convenience', 'supermarket', 'general'] }];
+}
+
+const CUSTOMER_SELECTORS: Selector[] = [
+  { key: 'amenity', values: ['marketplace', 'school', 'college', 'hospital', 'clinic', 'bank', 'bus_station'] },
+  { key: 'shop', values: ['supermarket', 'convenience', 'mall'] },
+];
+
+const OPPORTUNITY_SELECTORS: Selector[] = [
+  { key: 'amenity', values: ['marketplace'] },
+  { key: 'landuse', values: ['industrial', 'commercial'] },
+];
+
+function matches(tags: Record<string, string>, selectors: Selector[]) {
+  return selectors.some((selector) => selector.values.includes(tags[selector.key]));
+}
+
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function selectorToOverpass(selector: Selector, radius: number, lat: number, lng: number) {
+  const regex = selector.values.map(escapeRegex).join('|');
+  return `nwr(around:${radius},${lat},${lng})["${selector.key}"~"^(${regex})$"];`;
+}
+
+function readableCategory(tags: Record<string, string>) {
+  const raw = tags.shop || tags.amenity || tags.craft || tags.office || tags.landuse || tags.tourism || 'place';
+  return raw.replaceAll('_', ' ');
+}
+
+function readableName(tags: Record<string, string>) {
+  return tags.name || tags.brand || tags.operator || readableCategory(tags).replace(/\b\w/g, (m) => m.toUpperCase());
+}
+
+async function geocodeDistrict(district: string, state: string) {
+  const query = [district, state, 'India'].filter(Boolean).join(', ');
+  const url = new URL('https://nominatim.openstreetmap.org/search');
+  url.searchParams.set('format', 'jsonv2');
+  url.searchParams.set('limit', '1');
+  url.searchParams.set('countrycodes', 'in');
+  url.searchParams.set('q', query);
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 9000);
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'NirnayAI/1.0 (+https://github.com/akhandxsingh07/NirnayAI)',
+        'Accept-Language': 'en-IN,en;q=0.8',
+      },
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`Geocoding failed with ${response.status}`);
+    const rows = (await response.json()) as Array<{ lat?: string; lon?: string; display_name?: string }>;
+    const first = rows[0];
+    if (!first?.lat || !first?.lon) return null;
+    return { lat: Number(first.lat), lng: Number(first.lon), label: first.display_name || query };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function fetchOverpass(lat: number, lng: number, radiusMeters: number, category: string) {
+  const selectors = [...competitorSelectors(category), ...CUSTOMER_SELECTORS, ...OPPORTUNITY_SELECTORS];
+  const unique = new Map(selectors.map((selector) => [`${selector.key}:${selector.values.join(',')}`, selector]));
+  const body = Array.from(unique.values()).map((selector) => selectorToOverpass(selector, radiusMeters, lat, lng)).join('\n');
+  const query = `[out:json][timeout:18];\n(\n${body}\n);\nout center tags;`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
+  try {
+    const response = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8', 'User-Agent': 'NirnayAI/1.0 (+https://github.com/akhandxsingh07/NirnayAI)' },
+      body: new URLSearchParams({ data: query }).toString(),
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`Map data failed with ${response.status}`);
+    return (await response.json()) as {
+      elements?: Array<{ type: string; id: number; lat?: number; lon?: number; center?: { lat?: number; lon?: number }; tags?: Record<string, string> }>;
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 function numberOrNull(value: unknown) {
+  if (value === null || value === undefined || value === '') return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }
@@ -274,10 +260,7 @@ async function fetchWeather(lat: number, lng: number, category: string): Promise
   try {
     const response = await fetch(url, { signal: controller.signal });
     if (!response.ok) throw new Error(`Weather failed with ${response.status}`);
-    const data = (await response.json()) as {
-      current?: Record<string, unknown>;
-      daily?: Record<string, unknown>;
-    };
+    const data = (await response.json()) as { current?: Record<string, unknown>; daily?: Record<string, unknown> };
     const current = data.current || {};
     const daily = data.daily || {};
     const times = Array.isArray(daily.time) ? daily.time : [];
@@ -308,12 +291,7 @@ async function fetchWeather(lat: number, lng: number, category: string): Promise
     };
   } catch (error) {
     console.error('Live weather fetch failed:', error);
-    return {
-      available: false,
-      source: 'Open-Meteo forecast API',
-      forecast: [],
-      note: 'Live weather is temporarily unavailable. Retry later and do not treat a missing forecast as a safe operating signal.',
-    };
+    return { available: false, source: 'Open-Meteo forecast API', forecast: [], note: 'Live weather is temporarily unavailable. Retry later.' };
   } finally {
     clearTimeout(timeout);
   }
@@ -333,18 +311,19 @@ function normalizeMandiRecord(raw: Record<string, unknown>): MandiRecord {
   };
 }
 
+function mandiDateValue(value: string) {
+  const iso = Date.parse(value);
+  if (Number.isFinite(iso)) return iso;
+  const match = value.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if (!match) return 0;
+  return Date.UTC(Number(match[3]), Number(match[2]) - 1, Number(match[1]));
+}
+
 async function fetchMandiRecords(state: string, district: string): Promise<LiveIntelligencePayload['mandi']> {
   const apiKey = process.env.DATA_GOV_IN_API_KEY?.trim();
   const source = 'data.gov.in / AGMARKNET daily mandi prices';
   if (!apiKey) {
-    return {
-      configured: false,
-      available: false,
-      coverage: 'none',
-      records: [],
-      source,
-      note: 'Official daily mandi integration is ready but DATA_GOV_IN_API_KEY is not configured on the server.',
-    };
+    return { configured: false, available: false, coverage: 'none', records: [], source, unit: '₹/quintal', note: 'Official mandi integration is ready but DATA_GOV_IN_API_KEY is not configured on the server.' };
   }
 
   async function request(scope: 'district' | 'state') {
@@ -352,7 +331,7 @@ async function fetchMandiRecords(state: string, district: string): Promise<LiveI
     url.searchParams.set('api-key', apiKey as string);
     url.searchParams.set('format', 'json');
     url.searchParams.set('offset', '0');
-    url.searchParams.set('limit', '60');
+    url.searchParams.set('limit', '100');
     url.searchParams.set('filters[state]', state);
     if (scope === 'district' && district) url.searchParams.set('filters[district]', district);
 
@@ -377,7 +356,8 @@ async function fetchMandiRecords(state: string, district: string): Promise<LiveI
     }
 
     const latest = records
-      .filter((record) => record.commodity && record.market)
+      .filter((record) => record.commodity && record.market && record.modalPrice !== null)
+      .sort((a, b) => mandiDateValue(b.arrivalDate) - mandiDateValue(a.arrivalDate))
       .slice(0, 8);
 
     return {
@@ -386,22 +366,16 @@ async function fetchMandiRecords(state: string, district: string): Promise<LiveI
       coverage,
       records: latest,
       source,
+      unit: '₹/quintal',
       note: coverage === 'district'
-        ? `Latest available official mandi records filtered for ${district}. Prices are wholesale market observations, not guaranteed farm-gate or retail prices.`
+        ? `Latest returned official mandi observations for ${district}, sorted by arrival date. Values are wholesale ₹/quintal observations, not guaranteed farm-gate or retail prices.`
         : coverage === 'state'
-          ? `No district records were returned, so the feed shows recent ${state} records as broader context. Verify the nearest mandi before acting.`
+          ? `No district records were returned, so recent ${state} observations are shown as broader context. Values are wholesale ₹/quintal; verify the nearest mandi before acting.`
           : 'No recent records were returned for this location. Verify prices directly with the nearest mandi.',
     };
   } catch (error) {
     console.error('Official mandi fetch failed:', error);
-    return {
-      configured: true,
-      available: false,
-      coverage: 'none',
-      records: [],
-      source,
-      note: 'The official mandi feed is temporarily unavailable. Retry later or verify on AGMARKNET/data.gov.in.',
-    };
+    return { configured: true, available: false, coverage: 'none', records: [], source, unit: '₹/quintal', note: 'The official mandi feed is temporarily unavailable. Retry later or verify on AGMARKNET/data.gov.in.' };
   }
 }
 
@@ -432,24 +406,14 @@ async function buildLiveIntelligence(
   const cached = intelligenceCache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
 
-  const [weather, mandi] = await Promise.all([
-    fetchWeather(lat, lng, category),
-    fetchMandiRecords(state, district),
-  ]);
-
+  const [weather, mandi] = await Promise.all([fetchWeather(lat, lng, category), fetchMandiRecords(state, district)]);
   const payload: LiveIntelligencePayload = {
     center: { lat, lng, label, source },
     updatedAt: new Date().toISOString(),
     feeds: {
       map: 'LIVE',
       weather: weather.available ? 'LIVE_FORECAST' : 'UNAVAILABLE',
-      mandi: !mandi.configured
-        ? 'NOT_CONFIGURED'
-        : mandi.available
-          ? 'DAILY_OFFICIAL'
-          : mandi.coverage === 'none'
-            ? 'NO_LOCAL_RECORDS'
-            : 'UNAVAILABLE',
+      mandi: !mandi.configured ? 'NOT_CONFIGURED' : mandi.available ? 'DAILY_OFFICIAL' : 'NO_LOCAL_RECORDS',
       schemes: 'OFFICIAL_VERIFY',
       finance: 'CALCULATED',
     },
@@ -458,7 +422,7 @@ async function buildLiveIntelligence(
     schemes: {
       source: 'myScheme — Government of India',
       verificationUrl: 'https://www.myscheme.gov.in/',
-      note: 'NIRNAY AI does not scrape or claim real-time scheme eligibility. Use the official myScheme portal and implementing bank/agency for current rules and eligibility.',
+      note: 'NIRNAY AI does not claim real-time scheme eligibility. Verify current rules with myScheme and the implementing bank/agency.',
     },
   };
 
@@ -471,13 +435,15 @@ async function buildLiveIntelligence(
 }
 
 export function registerLiveMapRoutes(app: Express) {
+  app.use('/api/map', publicRateLimit);
+  app.use('/api/live', publicRateLimit);
+
   app.get('/api/map/analyze', async (req: Request, res: Response) => {
-    const district = String(req.query.district || '').trim();
-    const state = String(req.query.state || 'Uttar Pradesh').trim();
-    const category = String(req.query.category || 'Other').trim();
+    const district = String(req.query.district || '').trim().slice(0, 120);
+    const state = String(req.query.state || 'Uttar Pradesh').trim().slice(0, 120);
+    const category = String(req.query.category || 'Other').trim().slice(0, 120);
     const requestedRadiusKm = Number(req.query.radiusKm || 5);
     const radiusKm = clamp(Number.isFinite(requestedRadiusKm) ? requestedRadiusKm : 5, 2, 10);
-
     const requestedLat = Number(req.query.lat);
     const requestedLng = Number(req.query.lng);
     const hasLiveCoordinates = Number.isFinite(requestedLat) && Number.isFinite(requestedLng);
@@ -499,7 +465,7 @@ export function registerLiveMapRoutes(app: Express) {
       }
 
       const cacheKey = `${lat.toFixed(3)}:${lng.toFixed(3)}:${radiusKm}:${category.toLowerCase()}`;
-      const cached = cache.get(cacheKey);
+      const cached = mapCache.get(cacheKey);
       if (cached && cached.expiresAt > Date.now()) return res.json(cached.value);
 
       const raw = await fetchOverpass(lat, lng, Math.round(radiusKm * 1000), category);
@@ -553,28 +519,25 @@ export function registerLiveMapRoutes(app: Express) {
           nearestCompetitorKm: competitorPlaces[0]?.distanceKm ?? null,
           competitorDensity: competitorCount >= 12 ? 'High' : competitorCount >= 5 ? 'Moderate' : 'Low',
         },
-        coverageNote: 'Live OpenStreetMap/Overpass data can be incomplete in some rural areas. Use it as decision support and verify important places locally.',
+        coverageNote: 'Live OpenStreetMap/Overpass data can be incomplete in rural areas. Use it as decision support and verify important places locally.',
       };
 
-      cache.set(cacheKey, { expiresAt: Date.now() + MAP_CACHE_TTL_MS, value: payload });
-      if (cache.size > 60) {
-        const firstKey = cache.keys().next().value as string | undefined;
-        if (firstKey) cache.delete(firstKey);
+      mapCache.set(cacheKey, { expiresAt: Date.now() + MAP_CACHE_TTL_MS, value: payload });
+      if (mapCache.size > 60) {
+        const firstKey = mapCache.keys().next().value as string | undefined;
+        if (firstKey) mapCache.delete(firstKey);
       }
-
       return res.json(payload);
     } catch (error) {
       console.error('Live map analysis failed:', error);
-      return res.status(502).json({
-        error: 'Live map service is temporarily unavailable. Please retry in a moment.',
-      });
+      return res.status(502).json({ error: 'Live map service is temporarily unavailable. Please retry in a moment.' });
     }
   });
 
   app.get('/api/live/intelligence', async (req: Request, res: Response) => {
-    const district = String(req.query.district || '').trim();
-    const state = String(req.query.state || 'Uttar Pradesh').trim();
-    const category = String(req.query.category || 'Other').trim();
+    const district = String(req.query.district || '').trim().slice(0, 120);
+    const state = String(req.query.state || 'Uttar Pradesh').trim().slice(0, 120);
+    const category = String(req.query.category || 'Other').trim().slice(0, 120);
     const requestedLat = Number(req.query.lat);
     const requestedLng = Number(req.query.lng);
 
