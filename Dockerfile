@@ -2,7 +2,9 @@ FROM node:20-alpine AS build
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
+# Use package.json as the source of truth because the current lockfile is older
+# than a few recently-added dependencies. A normal npm install refreshes it.
+COPY package.json ./
 RUN npm install --include=dev --no-audit --no-fund
 
 COPY . .
@@ -13,9 +15,8 @@ FROM node:20-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
-COPY package.json package-lock.json ./
-RUN npm install --omit=dev --no-audit --no-fund && npm cache clean --force
-
+COPY package.json ./
+COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 
 USER node
