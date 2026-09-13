@@ -6,6 +6,7 @@ import {
   type ChatContext,
   type ChatHistoryMessage,
 } from '../services/chatService';
+import { requestNirnayVoice } from '../services/voiceService';
 
 interface VoiceAssistantModalProps {
   isOpen: boolean;
@@ -43,6 +44,18 @@ const SPEECH_LOCALES: Record<LanguageCode, string> = {
   te: 'te-IN', kn: 'kn-IN', gu: 'gu-IN', pa: 'pa-IN',
 };
 
+const VOICE_NAME_HINTS: Record<LanguageCode, string[]> = {
+  en: ['english india', 'english (india)', 'en-in'],
+  hi: ['hindi', 'हिन्दी', 'हिंदी', 'hi-in'],
+  bn: ['bengali', 'bangla', 'বাংলা', 'bn-in'],
+  mr: ['marathi', 'मराठी', 'mr-in'],
+  ta: ['tamil', 'தமிழ்', 'ta-in'],
+  te: ['telugu', 'తెలుగు', 'te-in'],
+  kn: ['kannada', 'ಕನ್ನಡ', 'kn-in'],
+  gu: ['gujarati', 'ગુજરાતી', 'gu-in'],
+  pa: ['punjabi', 'ਪੰਜਾਬੀ', 'pa-in'],
+};
+
 const UI_COPY: Record<LanguageCode, UiCopy> = {
   en: { title: 'Ask NIRNAY AI', subtitle: 'Multilingual voice + hyper-local business advisor', greeting: 'Namaste! I can speak with you and answer using your district, skill, capital, land, experience and business plan. Ask about customers, pricing, finance, schemes, risks, licences or a 90-day action plan.', unsupported: 'Voice input is not supported in this browser. You can still type your question.', loading: 'NIRNAY AI is analysing your business context...', suggested: 'Suggested questions', placeholder: 'Ask or speak about your business...', listening: 'Listening... speak now', stop: 'Stop', readAloud: 'Play this answer', error: 'I could not reach the advisory engine. Please try again.', voiceOn: 'AI voice ON', voiceOff: 'AI voice OFF', speaking: 'Speaking...', prompts: ['Give me a 90-day action plan', 'How should I split my capital?', 'Which schemes should I verify?', 'How do I get my first 20 customers?'] },
   hi: { title: 'NIRNAY AI से पूछें', subtitle: 'बहुभाषी वॉइस + हाइपर-लोकल बिज़नेस सलाहकार', greeting: 'नमस्ते! मैं आपसे आवाज़ में बात कर सकता हूँ और आपके जिले, कौशल, पूंजी, जमीन, अनुभव और बिज़नेस प्लान के आधार पर जवाब दे सकता हूँ। ग्राहक, कीमत, वित्त, योजना, जोखिम, लाइसेंस या 90-दिन की योजना पूछें।', unsupported: 'इस ब्राउज़र में वॉइस इनपुट उपलब्ध नहीं है। आप सवाल टाइप कर सकते हैं।', loading: 'NIRNAY AI आपके बिज़नेस संदर्भ का विश्लेषण कर रहा है...', suggested: 'सुझाए गए सवाल', placeholder: 'अपने बिज़नेस के बारे में पूछें या बोलें...', listening: 'सुन रहा हूँ... अब बोलें', stop: 'रोकें', readAloud: 'यह उत्तर सुनें', error: 'अभी सलाह इंजन से संपर्क नहीं हो पाया। दोबारा कोशिश करें।', voiceOn: 'AI आवाज़ चालू', voiceOff: 'AI आवाज़ बंद', speaking: 'जवाब बोल रहा है...', prompts: ['90 दिन की कार्ययोजना बनाएं', 'मेरी पूंजी कैसे बांटूं?', 'कौन-सी योजनाएं जांचूं?', 'पहले 20 ग्राहक कैसे मिलेंगे?'] },
@@ -59,13 +72,21 @@ function normalizeLanguage(value?: string): LanguageCode {
   return value && value in UI_COPY ? (value as LanguageCode) : 'en';
 }
 
-function pickVoice(language: LanguageCode) {
-  if (!('speechSynthesis' in window)) return undefined;
-  const voices = window.speechSynthesis.getVoices();
+function pickVoice(language: LanguageCode, voices: SpeechSynthesisVoice[]) {
   const locale = SPEECH_LOCALES[language].toLowerCase();
   const base = locale.split('-')[0];
+  const hints = VOICE_NAME_HINTS[language];
+
+  const exactLocale = voices.find((voice) => voice.lang.toLowerCase() === locale);
+  if (exactLocale) return exactLocale;
+
+  const hinted = voices.find((voice) => {
+    const haystack = `${voice.name} ${voice.lang}`.toLowerCase();
+    return hints.some((hint) => haystack.includes(hint.toLowerCase()));
+  });
+  if (hinted) return hinted;
+
   return (
-    voices.find((voice) => voice.lang.toLowerCase() === locale) ||
     voices.find((voice) => voice.lang.toLowerCase().startsWith(`${base}-`)) ||
     voices.find((voice) => voice.lang.toLowerCase() === base)
   );
@@ -79,6 +100,9 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({ isOpen
   const recognitionRef = useRef<any>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const lastAutoSpokenRef = useRef(-1);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
+  const speechRequestRef = useRef(0);
 
   const greeting = useMemo<Message>(() => ({
     role: 'assistant',
@@ -94,29 +118,103 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({ isOpen
   const [isLoading, setIsLoading] = useState(false);
   const [autoSpeak, setAutoSpeak] = useState(true);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [browserVoices, setBrowserVoices] = useState<SpeechSynthesisVoice[]>([]);
 
-  const speakText = (text: string) => {
-    if (!('speechSynthesis' in window) || !text.trim()) return;
-    window.speechSynthesis.cancel();
+  const clearCurrentAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = '';
+      audioRef.current = null;
+    }
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
+  };
+
+  const cancelVoiceOutput = () => {
+    speechRequestRef.current += 1;
+    clearCurrentAudio();
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    setIsSpeaking(false);
+  };
+
+  const speakWithBrowser = (text: string, requestId: number) => {
+    if (!('speechSynthesis' in window) || requestId !== speechRequestRef.current) {
+      setIsSpeaking(false);
+      return;
+    }
+
+    const synth = window.speechSynthesis;
+    const voices = browserVoices.length ? browserVoices : synth.getVoices();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = SPEECH_LOCALES[language];
-    utterance.rate = 0.92;
+    utterance.rate = 0.9;
     utterance.pitch = 1;
-    const voice = pickVoice(language);
+    const voice = pickVoice(language, voices);
     if (voice) utterance.voice = voice;
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => setIsSpeaking(false);
     utterance.onerror = () => setIsSpeaking(false);
-    window.speechSynthesis.speak(utterance);
+    synth.speak(utterance);
+  };
+
+  const speakText = async (text: string) => {
+    if (!text.trim()) return;
+
+    const requestId = speechRequestRef.current + 1;
+    speechRequestRef.current = requestId;
+    clearCurrentAudio();
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    setIsSpeaking(true);
+
+    const nativeVoice = await requestNirnayVoice(text, language);
+    if (requestId !== speechRequestRef.current) return;
+
+    if (nativeVoice) {
+      const url = URL.createObjectURL(nativeVoice.blob);
+      audioUrlRef.current = url;
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended = () => {
+        if (requestId === speechRequestRef.current) setIsSpeaking(false);
+        clearCurrentAudio();
+      };
+      audio.onerror = () => {
+        clearCurrentAudio();
+        speakWithBrowser(text, requestId);
+      };
+      try {
+        await audio.play();
+        return;
+      } catch {
+        clearCurrentAudio();
+      }
+    }
+
+    speakWithBrowser(text, requestId);
   };
 
   useEffect(() => {
+    if (!('speechSynthesis' in window)) return;
+    const synth = window.speechSynthesis;
+    const refreshVoices = () => setBrowserVoices(synth.getVoices());
+    refreshVoices();
+    synth.addEventListener('voiceschanged', refreshVoices);
+    const timer = window.setTimeout(refreshVoices, 350);
+    return () => {
+      window.clearTimeout(timer);
+      synth.removeEventListener('voiceschanged', refreshVoices);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!isOpen) {
-      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-      setIsSpeaking(false);
+      cancelVoiceOutput();
       return;
     }
     if (previousContextRef.current !== contextSignature) {
+      cancelVoiceOutput();
       setMessages([greeting]);
       setSuggestedPrompts(copy.prompts);
       previousContextRef.current = contextSignature;
@@ -130,7 +228,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({ isOpen
     const latest = messages[index];
     if (latest.role !== 'assistant' || lastAutoSpokenRef.current === index) return;
     lastAutoSpokenRef.current = index;
-    const timer = window.setTimeout(() => speakText(latest.text), 120);
+    const timer = window.setTimeout(() => void speakText(latest.text), 120);
     return () => window.clearTimeout(timer);
   }, [messages, autoSpeak, isOpen, language]);
 
@@ -162,6 +260,8 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({ isOpen
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
+  useEffect(() => () => cancelVoiceOutput(), []);
+
   if (!isOpen) return null;
 
   const toggleListening = () => {
@@ -171,8 +271,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({ isOpen
       setIsListening(false);
       return;
     }
-    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-    setIsSpeaking(false);
+    cancelVoiceOutput();
     setInputText('');
     try {
       recognitionRef.current.start();
@@ -186,8 +285,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({ isOpen
     const query = (textToSend || inputText).trim();
     if (!query || isLoading) return;
 
-    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-    setIsSpeaking(false);
+    cancelVoiceOutput();
     if (isListening && recognitionRef.current) recognitionRef.current.stop();
     setIsListening(false);
 
@@ -210,10 +308,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({ isOpen
   const toggleAutoSpeak = () => {
     setAutoSpeak((value) => {
       const next = !value;
-      if (!next && 'speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-        setIsSpeaking(false);
-      }
+      if (!next) cancelVoiceOutput();
       return next;
     });
   };
@@ -271,7 +366,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({ isOpen
                       {message.sources?.length ? message.sources.join(' · ') : 'NIRNAY AI advisory context'}
                       {message.confidenceNote && <span className="mt-0.5 block">{message.confidenceNote}</span>}
                     </div>
-                    <button onClick={() => speakText(message.text)} title={copy.readAloud} className="shrink-0 rounded-lg border border-[#E8D9C8] bg-[#FFFDF8] p-1.5 text-[#8B5E47] transition hover:bg-[#F3E8DC] hover:text-[#2B1B16]">
+                    <button onClick={() => void speakText(message.text)} title={copy.readAloud} className="shrink-0 rounded-lg border border-[#E8D9C8] bg-[#FFFDF8] p-1.5 text-[#8B5E47] transition hover:bg-[#F3E8DC] hover:text-[#2B1B16]">
                       <Volume2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
