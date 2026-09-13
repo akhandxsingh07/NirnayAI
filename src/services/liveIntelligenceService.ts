@@ -53,6 +53,7 @@ export interface LiveIntelligencePayload {
     coverage: 'district' | 'state' | 'none';
     records: LiveMandiRecord[];
     source: string;
+    unit: '₹/quintal';
     note: string;
   };
   schemes: {
