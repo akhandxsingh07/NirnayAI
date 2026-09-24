@@ -371,7 +371,7 @@ const DashboardPreview: React.FC<{
   <div className="nirnay-dashboard-shell overflow-hidden rounded-[24px] border border-[#DED2C1] bg-[#FFFDF8]/92 backdrop-blur-md">
     <div className="flex items-center justify-between border-b border-[#E9DFD1] bg-[#FFFDF8]/80 px-5 py-4">
       <div className="flex items-center gap-2 font-display text-2xl text-[#2A1A10]"><Sprout className="h-5 w-5 text-[#9D6A30]" /> Nirnay AI</div>
-      <span className="rounded-full border border-[#DCCAAF] bg-[#F8F0E4] px-2.5 py-1 text-[10px] font-semibold text-[#756047]">{MOTION_COPY[language].demo}</span>
+      <span className="nirnay-preview-label rounded-full border border-[#DCCAAF] bg-[#F8F0E4] px-2.5 py-1 text-[10px] font-semibold text-[#756047]">{MOTION_COPY[language].demo}</span>
     </div>
 
     <div className="grid min-h-[445px] md:grid-cols-[145px_1fr]">

@@ -57,6 +57,10 @@
 
 .nirnay-depth-screen .nirnay-dashboard-shell::after { display: none; }
 
+@media (hover: hover) and (pointer: fine) and (min-width: 1024px) {
+  .nirnay-preview-label { margin-right: 56px; }
+}
+
 .nirnay-depth-accent {
   position: absolute;
   pointer-events: none;
