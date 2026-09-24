@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { PageId, LanguageCode } from '../types';
 import { SUPPORTED_LANGUAGES, t } from '../services/localizationService';
 import { Hero } from '@/components/ui/animated-hero';
+import { DepthShowcase } from '../components/landing/DepthShowcase';
 import {
   BarChart3,
   CheckCircle2,
@@ -165,6 +166,18 @@ const NAV_COPY: Record<LanguageCode, LandingNavCopy> = {
 
 const ruralVideoSources = ['/rural-hero.mp4', 'https://www.pexels.com/download/video/37664921/'];
 
+const MOTION_COPY: Record<LanguageCode, { pause: string; play: string; reduced: string; demo: string }> = {
+  en: { pause: 'Pause motion', play: 'Play motion', reduced: 'Reduced motion', demo: 'Illustrative preview' },
+  hi: { pause: 'एनीमेशन रोकें', play: 'एनीमेशन चलाएं', reduced: 'कम एनीमेशन', demo: 'उदाहरण पूर्वावलोकन' },
+  bn: { pause: 'অ্যানিমেশন থামান', play: 'অ্যানিমেশন চালান', reduced: 'কম অ্যানিমেশন', demo: 'উদাহরণ প্রিভিউ' },
+  mr: { pause: 'ॲनिमेशन थांबवा', play: 'ॲनिमेशन सुरू करा', reduced: 'कमी ॲनिमेशन', demo: 'उदाहरण पूर्वावलोकन' },
+  ta: { pause: 'அசைவை நிறுத்து', play: 'அசைவை இயக்கு', reduced: 'குறைந்த அசைவு', demo: 'எடுத்துக்காட்டு முன்னோட்டம்' },
+  te: { pause: 'యానిమేషన్ ఆపు', play: 'యానిమేషన్ ప్రారంభించు', reduced: 'తగ్గిన కదలిక', demo: 'ఉదాహరణ ప్రివ్యూ' },
+  kn: { pause: 'ಚಲನೆ ನಿಲ್ಲಿಸಿ', play: 'ಚಲನೆ ಪ್ರಾರಂಭಿಸಿ', reduced: 'ಕಡಿಮೆ ಚಲನೆ', demo: 'ಉದಾಹರಣೆ ಮುನ್ನೋಟ' },
+  gu: { pause: 'એનિમેશન રોકો', play: 'એનિમેશન શરૂ કરો', reduced: 'ઓછું એનિમેશન', demo: 'ઉદાહરણ પૂર્વાવલોકન' },
+  pa: { pause: 'ਐਨੀਮੇਸ਼ਨ ਰੋਕੋ', play: 'ਐਨੀਮੇਸ਼ਨ ਚਲਾਓ', reduced: 'ਘੱਟ ਐਨੀਮੇਸ਼ਨ', demo: 'ਉਦਾਹਰਨ ਝਲਕ' },
+};
+
 export const LandingPage: React.FC<LandingPageProps> = ({
   onNavigate,
   language,
@@ -173,36 +186,52 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   onOpenHelp,
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const heroRef = useRef<HTMLElement | null>(null);
   const [isPaused, setIsPaused] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const [finePointer, setFinePointer] = useState(() => window.matchMedia('(hover: hover) and (pointer: fine) and (min-width: 1024px)').matches);
+  const [heroVisible, setHeroVisible] = useState(true);
+  const [pageVisible, setPageVisible] = useState(() => document.visibilityState !== 'hidden');
   const [storyOpen, setStoryOpen] = useState(false);
   const copy = NAV_COPY[language] || NAV_COPY.en;
+  const motionCopy = MOTION_COPY[language] || MOTION_COPY.en;
   const featureBody = t('heroSupporting', language);
+  const motionEnabled = !isPaused && !reducedMotion;
+  const heroMotionEnabled = motionEnabled && heroVisible && pageVisible && !storyOpen;
+  const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData;
+  const videoAllowed = finePointer && !reducedMotion && !saveData;
 
   useEffect(() => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      videoRef.current?.pause();
-      setIsPaused(true);
-    }
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const pointer = window.matchMedia('(hover: hover) and (pointer: fine) and (min-width: 1024px)');
+    const preferencesChanged = () => { setReducedMotion(reduced.matches); setFinePointer(pointer.matches); };
+    const visibilityChanged = () => setPageVisible(document.visibilityState !== 'hidden');
+    reduced.addEventListener('change', preferencesChanged);
+    pointer.addEventListener('change', preferencesChanged);
+    document.addEventListener('visibilitychange', visibilityChanged);
+    const observer = new IntersectionObserver(([entry]) => setHeroVisible(entry.isIntersecting), { threshold: 0.05 });
+    if (heroRef.current) observer.observe(heroRef.current);
+    return () => {
+      reduced.removeEventListener('change', preferencesChanged);
+      pointer.removeEventListener('change', preferencesChanged);
+      document.removeEventListener('visibilitychange', visibilityChanged);
+      observer.disconnect();
+    };
   }, []);
 
-  const toggleVideo = () => {
+  useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    if (video.paused) {
-      void video.play();
-      setIsPaused(false);
-    } else {
-      video.pause();
-      setIsPaused(true);
-    }
-  };
+    if (heroMotionEnabled && videoAllowed) void video.play().catch(() => { /* The decorative background may be unavailable. */ });
+    else video.pause();
+  }, [heroMotionEnabled, videoAllowed]);
 
   const scrollToSolutions = () => {
-    document.getElementById('solutions')?.scrollIntoView({ behavior: 'smooth' });
+    document.getElementById('solutions')?.scrollIntoView({ behavior: motionEnabled ? 'smooth' : 'auto' });
   };
 
   return (
-    <div className="min-h-screen overflow-hidden bg-[#FBF7EF] text-[#281C13]">
+    <div className="nirnay-landing min-h-screen overflow-hidden bg-[#FBF7EF] text-[#281C13]" data-motion={motionEnabled && pageVisible ? 'running' : 'paused'}>
       <header className="sticky top-0 z-40 border-b border-[#E7DDCF]/80 bg-[#FBF7EF]/92 shadow-[0_8px_30px_rgba(73,48,28,.04)] backdrop-blur-xl">
         <div className="mx-auto flex max-w-[1380px] items-center justify-between gap-5 px-5 py-3.5 sm:px-8 lg:px-10">
           <button onClick={() => onNavigate('landing')} className="flex items-center gap-3 text-left">
@@ -245,21 +274,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       </header>
 
       <main>
-        <section className="relative isolate overflow-hidden border-b border-[#E7DDCF]">
-          <video ref={videoRef} autoPlay muted loop playsInline preload="metadata" aria-hidden="true" className="nirnay-hero-video pointer-events-none absolute inset-0 h-full w-full object-cover">
-            {ruralVideoSources.map((source) => <source key={source} src={source} type="video/mp4" />)}
+        <section ref={heroRef} className="nirnay-hero relative isolate overflow-hidden border-b border-[#E7DDCF]" data-motion={heroMotionEnabled ? 'running' : 'paused'}>
+          <video ref={videoRef} key={String(videoAllowed)} muted loop playsInline preload={videoAllowed ? 'metadata' : 'none'} aria-hidden="true" className="nirnay-hero-video pointer-events-none absolute inset-0 h-full w-full object-cover">
+            {videoAllowed && ruralVideoSources.map((source) => <source key={source} src={source} type="video/mp4" />)}
           </video>
           <div className="pointer-events-none absolute inset-0" />
           <div className="pointer-events-none absolute inset-0" />
           <div className="nirnay-video-grain pointer-events-none absolute inset-0" />
           <div className="nirnay-rural-scene pointer-events-none absolute inset-x-0 bottom-0 h-64" />
 
-          <button type="button" onClick={toggleVideo} className="absolute bottom-5 right-5 z-20 hidden items-center gap-2 rounded-full border border-[#D6C2A4] bg-[#FFFDF8]/88 px-3 py-2 text-[11px] font-bold text-[#6D4B27] shadow-sm backdrop-blur-md transition hover:bg-white md:flex">
-            {isPaused ? <Play className="h-3.5 w-3.5 fill-current" /> : <Pause className="h-3.5 w-3.5" />}
-            {isPaused ? 'Play scene' : 'Pause scene'}
+          <button type="button" onClick={() => setIsPaused((paused) => !paused)} disabled={reducedMotion} aria-pressed={isPaused || reducedMotion} className="absolute bottom-3 right-5 z-20 flex items-center gap-2 rounded-full border border-[#D6C2A4] bg-[#FFFDF8]/95 px-4 py-3 text-xs font-bold text-[#6D4B27] shadow-sm transition hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8D5D28] disabled:opacity-70">
+            {isPaused && !reducedMotion ? <Play className="h-3.5 w-3.5 fill-current" /> : <Pause className="h-3.5 w-3.5" />}
+            {reducedMotion ? motionCopy.reduced : isPaused ? motionCopy.play : motionCopy.pause}
           </button>
 
-          <div className="relative z-10 mx-auto grid min-h-[680px] max-w-[1380px] items-center gap-12 px-5 py-12 sm:px-8 lg:grid-cols-[0.9fr_1.1fr] lg:px-10 lg:py-16">
+          <div className="relative z-10 mx-auto grid min-h-[680px] max-w-[1380px] items-center gap-10 px-5 pb-20 pt-12 sm:px-8 lg:grid-cols-[0.9fr_1.1fr] lg:px-10 lg:py-20">
             <div>
               <Hero
                 eyebrow={copy.badge}
@@ -272,6 +301,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 onPrimary={() => onNavigate('assessment')}
                 onSecondary={() => setStoryOpen(true)}
                 align="left"
+                motionEnabled={heroMotionEnabled}
               />
 
               <div className="mt-6 flex flex-wrap gap-x-6 gap-y-3 text-sm text-[#605449]">
@@ -281,7 +311,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </div>
             </div>
 
-            <DashboardPreview language={language} onNavigate={onNavigate} onTryDemo={onTryDemo} onOpenHelp={onOpenHelp} />
+            <DepthShowcase motionEnabled={heroMotionEnabled && finePointer}>
+              <DashboardPreview language={language} onNavigate={onNavigate} onTryDemo={onTryDemo} onOpenHelp={onOpenHelp} />
+            </DepthShowcase>
           </div>
         </section>
 
@@ -339,7 +371,7 @@ const DashboardPreview: React.FC<{
   <div className="nirnay-dashboard-shell overflow-hidden rounded-[24px] border border-[#DED2C1] bg-[#FFFDF8]/92 backdrop-blur-md">
     <div className="flex items-center justify-between border-b border-[#E9DFD1] bg-[#FFFDF8]/80 px-5 py-4">
       <div className="flex items-center gap-2 font-display text-2xl text-[#2A1A10]"><Sprout className="h-5 w-5 text-[#9D6A30]" /> Nirnay AI</div>
-      <div className="flex items-center gap-3 text-[#75675B]"><span className="h-2 w-2 rounded-full bg-[#6E844C] shadow-[0_0_0_4px_rgba(110,132,76,.10)]" /><User className="h-5 w-5" /></div>
+      <span className="rounded-full border border-[#DCCAAF] bg-[#F8F0E4] px-2.5 py-1 text-[10px] font-semibold text-[#756047]">{MOTION_COPY[language].demo}</span>
     </div>
 
     <div className="grid min-h-[445px] md:grid-cols-[145px_1fr]">
@@ -383,7 +415,7 @@ const MiniStat: React.FC<{ icon: React.ReactNode; label: string; value: string; 
 );
 
 const FeatureCard: React.FC<{ icon: React.ReactNode; title: string; text: string; onClick: () => void }> = ({ icon, title, text, onClick }) => (
-  <button onClick={onClick} className="group rounded-2xl border border-[#E0D4C4] bg-[#FFFDF8] p-5 text-left shadow-[0_5px_18px_rgba(70,45,25,.04)] transition hover:-translate-y-1 hover:border-[#CFAE80] hover:shadow-[0_16px_38px_rgba(70,45,25,.10)]"><div className="flex items-start justify-between gap-3"><div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#F3E6D1] to-[#EAD5B5] text-[#98652A]">{icon}</div><ChevronRight className="h-5 w-5 text-[#96652D] transition group-hover:translate-x-0.5" /></div><h3 className="mt-4 font-display text-2xl text-[#25170D]">{title}</h3><p className="mt-2 line-clamp-3 text-sm leading-6 text-[#75675B]">{text}</p></button>
+  <button onClick={onClick} className="nirnay-feature-card group rounded-2xl border border-[#E0D4C4] bg-[#FFFDF8] p-5 text-left shadow-[0_5px_18px_rgba(70,45,25,.04)] transition hover:border-[#CFAE80] hover:shadow-[0_16px_38px_rgba(70,45,25,.10)]"><div className="flex items-start justify-between gap-3"><div className="nirnay-feature-icon flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#F3E6D1] to-[#EAD5B5] text-[#98652A]">{icon}</div><ChevronRight className="h-5 w-5 text-[#96652D]" /></div><h3 className="mt-4 font-display text-2xl text-[#25170D]">{title}</h3><p className="mt-2 line-clamp-3 text-sm leading-6 text-[#75675B]">{text}</p></button>
 );
 
 const Metric: React.FC<{ icon: React.ReactNode; value: string; label: string }> = ({ icon, value, label }) => (

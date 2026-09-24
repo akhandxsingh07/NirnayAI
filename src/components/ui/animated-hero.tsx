@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { MoveRight, PhoneCall } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -16,6 +16,7 @@ interface HeroProps {
   onSecondary?: () => void;
   className?: string;
   align?: "left" | "center";
+  motionEnabled?: boolean;
 }
 
 function Hero({
@@ -31,20 +32,24 @@ function Hero({
   onSecondary,
   className,
   align = "center",
+  motionEnabled = true,
 }: HeroProps) {
   const [titleNumber, setTitleNumber] = useState(0);
+  const reducedMotion = useReducedMotion();
+  const animateTitle = motionEnabled && !reducedMotion;
   const titles = useMemo(
     () => providedTitles ?? ["amazing", "new", "wonderful", "beautiful", "smart"],
     [providedTitles],
   );
 
   useEffect(() => {
+    if (!animateTitle || titles.length < 2) return;
     const timeoutId = setTimeout(() => {
       setTitleNumber((current) => (current === titles.length - 1 ? 0 : current + 1));
     }, 2200);
 
     return () => clearTimeout(timeoutId);
-  }, [titleNumber, titles]);
+  }, [titleNumber, titles, animateTitle]);
 
   const isLeft = align === "left";
 
@@ -65,12 +70,13 @@ function Hero({
         <div className={cn("flex max-w-3xl flex-col gap-4", isLeft ? "items-start" : "items-center")}>
           <h1 className={cn("font-display text-[48px] leading-[0.98] tracking-[-0.035em] text-[#21150C] sm:text-[62px] lg:text-[74px]", isLeft ? "text-left" : "text-center")}>
             {titleLead ? <span className="block">{titleLead}</span> : null}
-            <span className={cn("relative flex min-h-[1.02em] w-full overflow-hidden pb-2 pt-1", isLeft ? "justify-start" : "justify-center") }>
-              {titles.map((title, index) => (
+            <span className="sr-only">{titles[0]} </span>
+            <span aria-hidden="true" className={cn("relative flex min-h-[1.02em] w-full overflow-hidden pb-2 pt-1", isLeft ? "justify-start" : "justify-center") }>
+              {animateTitle ? titles.map((title, index) => (
                 <motion.span
                   key={`${title}-${index}`}
                   className="absolute font-display font-normal"
-                  initial={{ opacity: 0, y: -90 }}
+                  initial={false}
                   transition={{ type: "spring", stiffness: 55, damping: 16 }}
                   animate={
                     titleNumber === index
@@ -80,7 +86,7 @@ function Hero({
                 >
                   {title}
                 </motion.span>
-              ))}
+              )) : <span className="absolute font-display font-normal">{titles[titleNumber % titles.length]}</span>}
               <span className="invisible">{titles.reduce((a, b) => (a.length > b.length ? a : b), titles[0] ?? "")}</span>
             </span>
             {titleTail ? <span className="block">{titleTail}</span> : null}
