@@ -7,6 +7,7 @@ const HEIGHT = 460;
 const MIN_ZOOM = 4;
 const MAX_ZOOM = 17;
 const TILE_URL = 'https://tile.openstreetmap.org';
+const initialZoom = (radiusKm: number) => radiusKm <= 5 ? 12 : 11;
 
 type Point = { lat: number; lng: number };
 
@@ -45,7 +46,7 @@ export function InteractiveMarketMap({ center, radiusKm, places, selectedId, onS
   const drag = useRef<{ x: number; y: number; worldX: number; worldY: number } | null>(null);
   const [width, setWidth] = useState(768);
   const [view, setView] = useState<Point>(center);
-  const [zoom, setZoom] = useState(radiusKm <= 5 ? 13 : 12);
+  const [zoom, setZoom] = useState(initialZoom(radiusKm));
 
   useEffect(() => {
     if (!container.current) return;
@@ -69,7 +70,7 @@ export function InteractiveMarketMap({ center, radiusKm, places, selectedId, onS
 
   useEffect(() => {
     setView(center);
-    setZoom(radiusKm <= 5 ? 13 : 12);
+    setZoom(initialZoom(radiusKm));
   }, [center.lat, center.lng, radiusKm]);
 
   const geometry = useMemo(() => {
@@ -157,7 +158,7 @@ export function InteractiveMarketMap({ center, radiusKm, places, selectedId, onS
       <div className="absolute right-3 top-3 z-20 grid gap-1 rounded-xl bg-white/95 p-1 shadow-md">
         <button type="button" title={labels.zoomIn} aria-label={labels.zoomIn} onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z + 1))} className="grid h-9 w-9 place-items-center rounded-lg hover:bg-[#F3E8DC] focus-visible:outline-2"><Plus size={17} /></button>
         <button type="button" title={labels.zoomOut} aria-label={labels.zoomOut} onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z - 1))} className="grid h-9 w-9 place-items-center rounded-lg hover:bg-[#F3E8DC] focus-visible:outline-2"><Minus size={17} /></button>
-        <button type="button" title={labels.recenter} aria-label={labels.recenter} onClick={() => { setView(center); setZoom(radiusKm <= 5 ? 13 : 12); }} className="grid h-9 w-9 place-items-center rounded-lg hover:bg-[#F3E8DC] focus-visible:outline-2"><Crosshair size={17} /></button>
+        <button type="button" title={labels.recenter} aria-label={labels.recenter} onClick={() => { setView(center); setZoom(initialZoom(radiusKm)); }} className="grid h-9 w-9 place-items-center rounded-lg hover:bg-[#F3E8DC] focus-visible:outline-2"><Crosshair size={17} /></button>
       </div>
       <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="absolute bottom-2 left-2 z-20 rounded-lg bg-white/95 px-2 py-1 text-[10px] font-semibold text-[#6B4535] shadow-sm">© OpenStreetMap contributors</a>
     </div>

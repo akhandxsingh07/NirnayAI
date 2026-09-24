@@ -218,7 +218,7 @@ export const LiveMarketMap: React.FC<LiveMarketMapProps> = ({ district, state, c
                 <div className="mt-1 text-[10px] leading-relaxed text-[#846653]">{data?.center.label || (village ? `${village}, ${district}` : district)}</div>
               </div>
 
-              {selected && (
+              {selected && visiblePlaces.some((place) => place.id === selected.id) && (
                 <div className="mt-3 rounded-2xl border border-[#D9B99B]/50 bg-white p-3">
                   <div className="flex items-start justify-between gap-2">
                     <div>
@@ -247,6 +247,13 @@ export const LiveMarketMap: React.FC<LiveMarketMapProps> = ({ district, state, c
                 </button>
               ))}
             </div>
+            {status === 'complete' && !visiblePlaces.length && filter !== 'all' && (
+              <p role="status" className="text-xs text-[#7A5A49]">
+                {language === 'hi'
+                  ? `इस ${radiusKm} किमी दायरे में OpenStreetMap पर ${filter === 'competitor' ? 'प्रतियोगी' : filter === 'customer' ? 'ग्राहक केंद्र' : 'अवसर केंद्र'} नहीं मिले। स्थानीय स्तर पर भी जाँच करें।`
+                  : `No mapped ${filter === 'competitor' ? 'competitors' : filter === 'customer' ? 'customer hubs' : 'opportunity hubs'} found within ${radiusKm} km. Verify nearby places locally as well.`}
+              </p>
+            )}
             <div className="text-[10px] leading-relaxed text-[#846653]">
               {copy.updated}: {new Date(data.updatedAt).toLocaleTimeString()} · {data.coverageNote}
             </div>
