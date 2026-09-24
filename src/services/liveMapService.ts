@@ -311,7 +311,8 @@ export async function analyzeLiveMarket(input: LiveMarketRequest): Promise<LiveM
       );
       return buildAnalysis(input, center, raw.elements || [], false);
     } catch (error) {
-      console.warn('Browser OSM place feed unavailable, trying server:', error);
+      console.warn('Browser OSM place feed unavailable:', error);
+      return buildAnalysis(input, center, [], true);
     }
   }
 
@@ -321,8 +322,6 @@ export async function analyzeLiveMarket(input: LiveMarketRequest): Promise<LiveM
   } catch {
     // Fall through to browser-side OSM recovery when a location needs geocoding.
   }
-
-  if (center) return buildAnalysis(input, center, [], true);
 
   const resolvedCenter = await resolveCenter(input);
   try {
