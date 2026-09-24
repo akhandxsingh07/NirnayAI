@@ -301,9 +301,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
         <section className="border-t border-[#EAE0D4] bg-[#FFFDF9] px-5 py-7 sm:px-8 lg:px-10">
           <div className="mx-auto grid max-w-[1380px] gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            <Metric icon={<Users className="h-7 w-7" />} value="10,000+" label="Rural Entrepreneurs" />
-            <Metric icon={<BarChart3 className="h-7 w-7" />} value="500+" label="Business Ideas Analyzed" />
-            <Metric icon={<Landmark className="h-7 w-7" />} value="200+" label="Government Support Paths" />
+            <Metric icon={<Users className="h-7 w-7" />} value="User-led" label="Entrepreneur Profile" />
+            <Metric icon={<BarChart3 className="h-7 w-7" />} value="Explainable" label="Business Fit Scoring" />
+            <Metric icon={<Landmark className="h-7 w-7" />} value="Verified links" label="Government Support Paths" />
             <Metric icon={<Sprout className="h-7 w-7" />} value="Stronger Villages" label="Brighter India" />
           </div>
         </section>

@@ -33,7 +33,7 @@ export const FeasibilityScore: React.FC<FeasibilityScoreProps> = ({ data, classN
       label: 'Capital Fit',
       score: safeData.capitalFit ?? 75,
       icon: DollarSign,
-      desc: 'Alignment with 10% margin & 90% debt servicing capacity',
+      desc: 'Fit between available capital, estimated setup cost and manageable funding gap',
     },
     {
       label: 'Competition Density',

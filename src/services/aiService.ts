@@ -119,6 +119,13 @@ const CATEGORY_SCORE: Record<BusinessCategory, { score: number; breakdown: [numb
   Other: { score: 75, breakdown: [77, 75, 70, 76, 77] },
 };
 
+const CATEGORY_MINIMUM_CAPITAL: Record<BusinessCategory, number> = {
+  Dairy: 250000, 'Food Processing': 200000, Retail: 75000,
+  'Agriculture Services': 120000, Poultry: 180000, Tailoring: 70000,
+  Handicrafts: 70000, 'Repair Services': 60000,
+  'Small Manufacturing': 120000, Other: 50000,
+};
+
 function interpolate(value: string, vars: Record<string, string>) {
   return Object.entries(vars).reduce((result, [key, replacement]) => result.replaceAll(`{${key}}`, replacement), value);
 }
@@ -211,15 +218,26 @@ function generateDeterministicAIResponse(formData: AssessmentFormData): AIAnalys
   const skill = formData.selectedExpertise || formData.category;
   const route = formData.targetMarket || district;
   const profile = CATEGORY_SCORE[formData.category] || CATEGORY_SCORE.Other;
+  const availableCapital = formData.availableMargin || formData.marginCapital || 0;
+  const minimumCapital = CATEGORY_MINIMUM_CAPITAL[formData.category] || CATEGORY_MINIMUM_CAPITAL.Other;
+  const capitalScore = Math.max(20, Math.min(100, Math.round((availableCapital / minimumCapital) * 100)));
+  const componentScores: [number, number, number, number, number] = [
+    profile.breakdown[0],
+    capitalScore,
+    profile.breakdown[2],
+    profile.breakdown[3],
+    profile.breakdown[4],
+  ];
+  const overallScore = Math.round(componentScores.reduce((sum, value) => sum + value, 0) / componentScores.length);
   const loc = `${formData.location.village}, ${district} (${formData.location.state})`;
   const recommendation = interpolate(copy.recommendation, { business, district, skill, route });
 
   return {
     feasibilityScore: {
-      overallScore: profile.score,
+      overallScore,
       statusLabel: copy.status,
       marketPotential: profile.breakdown[0],
-      capitalFit: profile.breakdown[1],
+      capitalFit: capitalScore,
       competitionScore: profile.breakdown[2],
       operationalFeasibility: profile.breakdown[3],
       growthPotential: profile.breakdown[4],

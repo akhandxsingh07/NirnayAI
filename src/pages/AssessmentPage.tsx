@@ -232,9 +232,9 @@ const skillLabel = (skill: SkillKey, language: LanguageCode) => SKILLS.find((ite
 const riskLabel = (risk: Risk, copy: Record<string, string>) => risk === 'Low' ? copy.low : risk === 'High' ? copy.high : copy.medium;
 
 const capitalFit = (capital: number, min: number, max: number) => {
-  if (capital >= min && capital <= max) return 25;
-  if (capital < min) return Math.max(0, 25 - ((min - capital) / Math.max(min, 1)) * 25);
-  return Math.max(8, 25 - ((capital - max) / Math.max(max, 1)) * 12);
+  if (capital >= min && capital <= max) return 20;
+  if (capital < min) return Math.max(0, 20 * (capital / Math.max(min, 1)));
+  return Math.max(8, 20 - ((capital - max) / Math.max(max, 1)) * 8);
 };
 
 export const AssessmentPage: React.FC<AssessmentPageProps> = ({ initialData, onSubmit, language }) => {
@@ -259,13 +259,13 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ initialData, onS
     const isUP = stateName === 'Uttar Pradesh';
     return BUSINESS_OPTIONS.map((business) => {
       const cFit = capitalFit(capital, business.minCapital, business.maxCapital);
-      const landFit = business.minLand === 0 ? 15 : landArea >= business.minLand ? 15 : Math.max(0, (landArea / business.minLand) * 15);
+      const landFit = business.minLand === 0 ? 10 : landArea >= business.minLand ? 10 : Math.max(0, (landArea / business.minLand) * 10);
       const hasSkillMatch = business.skills.includes(expertise);
-      const skillFit = hasSkillMatch ? 30 : 6;
+      const skillFit = hasSkillMatch ? 40 : 4;
       const boost = Math.max(...business.skills.map((skill) => districtProfile.boosts[skill] || 0), 0);
-      const locationFit = 8 + Math.min(12, boost);
-      const riskFit = business.risk === risk ? 5 : risk === 'High' ? 4 : business.risk === 'Low' ? 4 : 3;
-      const experienceFit = experience === 'Experienced' ? 5 : experience === 'Some' ? 4 : 3;
+      const locationFit = 5 + Math.min(10, boost);
+      const riskFit = business.risk === risk ? 8 : risk === 'High' ? 6 : business.risk === 'Low' ? 6 : 4;
+      const experienceFit = experience === 'Experienced' ? 7 : experience === 'Some' ? 6 : 4;
       const score = Math.min(98, Math.round(cFit + landFit + skillFit + locationFit + riskFit + experienceFit));
       const primarySkill = hasSkillMatch ? expertise : business.skills[0];
       const allocation = SKILL_PLAN[primarySkill];
@@ -281,7 +281,24 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ initialData, onS
         .sort((a, b) => b.matchScore - a.matchScore)
         .slice(0, 3);
 
-      return { ...business, score, localFit: Math.min(100, 55 + locationFit * 2), primarySkill, allocation, schemes };
+      return {
+        ...business,
+        score,
+        localFit: Math.min(100, 55 + locationFit * 3),
+        primarySkill,
+        hasSkillMatch,
+        fundingGap: Math.max(0, business.minCapital - capital),
+        breakdown: {
+          skill: Math.round(skillFit),
+          capital: Math.round(cFit),
+          location: Math.round(locationFit),
+          land: Math.round(landFit),
+          risk: Math.round(riskFit),
+          experience: Math.round(experienceFit),
+        },
+        allocation,
+        schemes,
+      };
     })
       .sort((a, b) => b.score - a.score)
       .slice(0, 3);
@@ -390,12 +407,42 @@ export const AssessmentPage: React.FC<AssessmentPageProps> = ({ initialData, onS
                 <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
                   <div className="flex-1 space-y-4">
                     <div className="flex flex-wrap items-center gap-3"><span className="rounded-full bg-[#6F7655]/15 px-3 py-1 text-xs font-black text-[#56603F]">#{index + 1} {copy.match}</span><span className="rounded-full bg-[#FAF0E5] px-3 py-1 text-xs font-black text-[#8B5E47]">{business.score}% {copy.businessFit}</span><span className="rounded-full bg-[#E8EEF6] px-3 py-1 text-xs font-black text-[#52667C]">{business.localFit}% {copy.localFit}</span></div>
-                    <div><h3 className="text-xl font-black text-[#2B1B16]">{business.name[language]}</h3><p className="mt-1 text-sm text-[#765849]">{formatTemplate(copy.because, { skill: skillLabel(business.primarySkill, language), district })}</p></div>
+                    <div>
+                      <h3 className="text-xl font-black text-[#2B1B16]">{business.name[language]}</h3>
+                      <p className="mt-1 text-sm text-[#765849]">
+                        {business.hasSkillMatch
+                          ? formatTemplate(copy.because, { skill: skillLabel(expertise, language), district })
+                          : `Alternative based on affordability and the ${district} market profile. It does not directly match your selected ${skillLabel(expertise, language)} skill.`}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-[#D9B99B]/50 bg-[#FFFDF9] p-4">
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <strong className="text-xs text-[#5B3C29]">Why this score</strong>
+                        <span className="text-[10px] text-[#8B5E47]">Skill 40 · Capital 20 · Location 15 · Land 10 · Risk 8 · Experience 7</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+                        {Object.entries(business.breakdown).map(([label, value]) => (
+                          <div key={label} className="rounded-xl bg-white p-2 text-center text-[11px]">
+                            <span className="block capitalize text-[#8B5E47]">{label}</span>
+                            <strong className="text-[#2B1B16]">{value}</strong>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                     <div className="grid gap-3 sm:grid-cols-3">
                       <div className="rounded-2xl bg-[#FAF7F3] p-3 text-xs"><span className="block text-[#8B5E47]">{copy.capitalRange}</span><strong>₹{business.minCapital.toLocaleString('en-IN')} – ₹{business.maxCapital.toLocaleString('en-IN')}</strong></div>
                       <div className="rounded-2xl bg-[#FAF7F3] p-3 text-xs"><span className="block text-[#8B5E47]">{copy.minimumLand}</span><strong>{business.minLand === 0 ? copy.noLand : `${business.minLand} ${copy.acre}`}</strong></div>
                       <div className="rounded-2xl bg-[#FAF7F3] p-3 text-xs"><span className="block text-[#8B5E47]">{copy.riskProfile}</span><strong>{riskLabel(business.risk, copy)}</strong></div>
                     </div>
+
+                    {business.fundingGap > 0 ? (
+                      <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-950">
+                        <strong>Funding gap: ₹{business.fundingGap.toLocaleString('en-IN')}</strong>
+                        <span className="mt-1 block">Your ₹{capital.toLocaleString('en-IN')} capital is below the ₹{business.minCapital.toLocaleString('en-IN')} minimum setup estimate. Start with a smaller pilot or verify finance options before committing.</span>
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-xs text-emerald-900"><strong>Capital check:</strong> Your available capital meets the minimum setup estimate for this option.</div>
+                    )}
 
                     <div className="rounded-2xl border border-[#D9B99B]/50 bg-[#FFF9F1] p-4">
                       <div className="mb-3 text-sm font-black text-[#5B3C29]">{copy.districtPlan}</div>

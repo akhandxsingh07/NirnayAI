@@ -36,6 +36,19 @@ const BUSINESS_FINANCE_PROFILES: Record<BusinessCategory, BusinessFinanceProfile
   Other: { capexShare: 0.4, inventoryShare: 0.25, workingCapitalShare: 0.35, steadyRevenueRate: 0.18, operatingExpenseRate: 0.6, rampStart: 0.38, year3Growth: 0.14 },
 };
 
+const MINIMUM_VIABLE_PROJECT_COST: Record<BusinessCategory, number> = {
+  Dairy: 250000,
+  'Food Processing': 200000,
+  Retail: 75000,
+  'Agriculture Services': 120000,
+  Poultry: 180000,
+  Tailoring: 70000,
+  Handicrafts: 70000,
+  'Repair Services': 60000,
+  'Small Manufacturing': 120000,
+  Other: 50000,
+};
+
 export function getBusinessFinanceProfile(category: BusinessCategory): BusinessFinanceProfile {
   return BUSINESS_FINANCE_PROFILES[category] || BUSINESS_FINANCE_PROFILES.Other;
 }
@@ -123,30 +136,36 @@ export function calculateFinancialStructure(
   category: BusinessCategory = 'Other'
 ): FinancialStructureData {
   const safeMargin = Math.max(5000, Number(availableMargin) || 50000);
-  const projectCost = Math.round(safeMargin / 0.1);
-  const loanRequirement = Math.round(projectCost * 0.9);
+  const minimumViableCost = MINIMUM_VIABLE_PROJECT_COST[category] || MINIMUM_VIABLE_PROJECT_COST.Other;
+  const projectCost = Math.max(minimumViableCost, safeMargin);
+  const entrepreneurMargin = Math.min(safeMargin, projectCost);
+  const loanRequirement = Math.max(0, projectCost - entrepreneurMargin);
+  const marginPercentage = Math.round((entrepreneurMargin / projectCost) * 100);
+  const loanPercentage = 100 - marginPercentage;
   const profile = getBusinessFinanceProfile(category);
 
   const isMicro = projectCost <= 140000;
   const interestRate = isMicro ? 6.5 : 8.0;
   const tenureMonths = isMicro ? 36 : 84;
   const moratoriumMonths = isMicro ? 3 : 6;
-  const emiCalc = calculateEMI(loanRequirement, interestRate, tenureMonths, moratoriumMonths);
+  const monthlyEMI = loanRequirement > 0
+    ? calculateEMI(loanRequirement, interestRate, tenureMonths, moratoriumMonths).monthlyEMI
+    : 0;
 
   return {
-    entrepreneurMargin: safeMargin,
+    entrepreneurMargin,
     totalProjectCost: projectCost,
     loanRequirement,
-    marginPercentage: 10,
-    loanPercentage: 90,
+    marginPercentage,
+    loanPercentage,
     recommendedScheme: isMicro ? 'Micro Finance Planning Route' : 'Term Loan Planning Route',
     schemeRationale: isMicro
-      ? `Indicative planning route because project cost ${formatINR(projectCost)} is within the prototype's ₹1.40 lakh threshold. Verify the actual lender, rate, tenure and eligibility before applying.`
-      : `Indicative planning route because project cost ${formatINR(projectCost)} is above the prototype's ₹1.40 lakh threshold. Verify the actual lender, rate, tenure, collateral and eligibility before applying.`,
+      ? `The minimum viable setup is estimated at ${formatINR(projectCost)}. Your available capital covers ${marginPercentage}% and the remaining ${formatINR(loanRequirement)} is the planning gap. Verify actual quotations and lender terms.`
+      : `The minimum viable setup is estimated at ${formatINR(projectCost)}. Your available capital covers ${marginPercentage}% and the remaining ${formatINR(loanRequirement)} is the planning gap. Verify quotations, lender terms, collateral and eligibility.`,
     interestRate,
     tenureMonths,
     moratoriumMonths,
-    monthlyEMI: emiCalc.monthlyEMI,
+    monthlyEMI,
     breakdown: {
       capexMachinery: Math.round(projectCost * profile.capexShare),
       initialInventory: Math.round(projectCost * profile.inventoryShare),

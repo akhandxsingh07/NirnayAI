@@ -19,6 +19,12 @@ export const SUPPORTED_LANGUAGES: LanguageMeta[] = [
 ];
 
 export const TRANSLATIONS: Record<string, Record<LanguageCode, string>> = {
+  analysisTitle: {
+    en: 'AI Feasibility Analysis', hi: 'AI व्यवहार्यता विश्लेषण', bn: 'AI সম্ভাব্যতা বিশ্লেষণ', mr: 'AI व्यवहार्यता विश्लेषण', ta: 'AI சாத்தியக்கூறு பகுப்பாய்வு', te: 'AI సాధ్యత విశ్లేషణ', kn: 'AI ಕಾರ್ಯಸಾಧ್ಯತೆ ವಿಶ್ಲೇಷಣೆ', gu: 'AI વ્યવહાર્યતા વિશ્લેષણ', pa: 'AI ਵਿਹਾਰਕਤਾ ਵਿਸ਼ਲੇਸ਼ਣ',
+  },
+  schemesTitle: {
+    en: 'Scheme and Finance Router', hi: 'योजना और वित्त मार्गदर्शक', bn: 'স্কিম ও অর্থায়ন নির্দেশক', mr: 'योजना आणि वित्त मार्गदर्शक', ta: 'திட்டம் மற்றும் நிதி வழிகாட்டி', te: 'పథకం మరియు ఆర్థిక మార్గదర్శి', kn: 'ಯೋಜನೆ ಮತ್ತು ಹಣಕಾಸು ಮಾರ್ಗದರ್ಶಿ', gu: 'યોજના અને નાણાં માર્ગદર્શક', pa: 'ਯੋਜਨਾ ਅਤੇ ਵਿੱਤ ਮਾਰਗਦਰਸ਼ਕ',
+  },
   appName: {
     en: 'NIRNAY AI',
     hi: 'निर्णय AI',

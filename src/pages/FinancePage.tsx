@@ -35,7 +35,7 @@ export const FinancePage: React.FC<FinancePageProps> = ({
             <h1 className="text-xl sm:text-2xl font-extrabold text-[#2B1B16]">{t('financeTitle', language)}</h1>
           </div>
           <p className="text-xs text-[#8B5E47] mt-1 max-w-3xl">
-            Indicative capital structure for <strong>{formData.category}</strong>: 10% entrepreneur margin ({formatINR(financialData.entrepreneurMargin)}) → planning project envelope ({formatINR(financialData.totalProjectCost)}) → estimated debt requirement ({formatINR(financialData.loanRequirement)}). Actual lender contribution can differ.
+            Minimum viable plan for <strong>{formData.category}</strong>: available capital {formatINR(financialData.entrepreneurMargin)} ({financialData.marginPercentage}%) and an estimated funding gap of {formatINR(financialData.loanRequirement)} ({financialData.loanPercentage}%). Verify the setup cost with current supplier quotations.
           </p>
         </div>
 
@@ -57,10 +57,10 @@ export const FinancePage: React.FC<FinancePageProps> = ({
         <div className="bg-[#4A2F24] text-white rounded-2xl p-5 shadow-xs space-y-2">
           <div className="flex items-center justify-between text-xs">
             <span className="font-bold text-[#D9B99B] uppercase tracking-wider">Planning Project Envelope</span>
-            <span className="px-2 py-0.5 rounded-full bg-white/20 text-[10px] text-[#F3E8DC] font-bold">Margin ÷ 10%</span>
+            <span className="px-2 py-0.5 rounded-full bg-white/20 text-[10px] text-[#F3E8DC] font-bold">Minimum viable estimate</span>
           </div>
           <div className="text-2xl sm:text-3xl font-black text-white">{formatINR(financialData.totalProjectCost)}</div>
-          <p className="text-[11px] text-[#D9B99B]">Illustrative envelope derived from the SIH prototype assumption; not a sanctioned project cost.</p>
+          <p className="text-[11px] text-[#D9B99B]">Category baseline for planning. Replace it with verified supplier quotations before investment.</p>
         </div>
 
         <div className="bg-white rounded-2xl border border-[#D9B99B]/40 p-5 shadow-xs space-y-2">
