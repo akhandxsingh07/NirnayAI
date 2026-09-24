@@ -274,7 +274,7 @@ function buildAnalysis(
     },
     coverageStatus: degraded ? 'unavailable' : limited.length ? 'complete' : 'empty',
     coverageNote: degraded
-      ? 'Base OpenStreetMap is available. Live nearby-place analysis is temporarily degraded because public OSM data servers are busy; retry later for markers.'
+      ? 'Base OpenStreetMap is available. The nearby-place feed did not respond; retry for markers or open the nearby business search.'
       : !limited.length
         ? 'No mapped places were returned in this radius. This does not mean there are no real businesses or customers; try another radius or verify locally.'
       : 'Live OpenStreetMap/Overpass data can be incomplete in rural areas. Use it as decision support and verify important places locally.',
@@ -297,27 +297,46 @@ export async function analyzeLiveMarket(input: LiveMarketRequest): Promise<LiveM
     params.set('lng', String(input.lng));
   }
 
+  // A browser request uses the visitor's connection instead of Render's shared
+  // outbound IP, which public Overpass instances sometimes throttle. Known
+  // coordinates need no geocoding, so try this direct route first.
+  const hasCoordinates = Number.isFinite(input.lat) && Number.isFinite(input.lng);
+  const center = hasCoordinates ? await resolveCenter(input) : null;
+  if (center) {
+    try {
+      const raw = await fetchBrowserOverpass(
+        center.lat, center.lng,
+        Math.round(Math.min(10, Math.max(2, input.radiusKm || 5)) * 1000),
+        input.category
+      );
+      return buildAnalysis(input, center, raw.elements || [], false);
+    } catch (error) {
+      console.warn('Browser OSM place feed unavailable, trying server:', error);
+    }
+  }
+
   try {
     const response = await fetch(`/api/map/analyze?${params.toString()}`);
     if (response.ok) return response.json() as Promise<LiveMarketAnalysis>;
   } catch {
-    // Fall through to browser-side OSM recovery. This avoids shared-cloud-IP
-    // throttling on public geocoding/Overpass services.
+    // Fall through to browser-side OSM recovery when a location needs geocoding.
   }
 
-  const center = await resolveCenter(input);
+  if (center) return buildAnalysis(input, center, [], true);
+
+  const resolvedCenter = await resolveCenter(input);
   try {
     const raw = await fetchBrowserOverpass(
-      center.lat,
-      center.lng,
+      resolvedCenter.lat,
+      resolvedCenter.lng,
       Math.round(Math.min(10, Math.max(2, input.radiusKm || 5)) * 1000),
       input.category
     );
-    return buildAnalysis(input, center, raw.elements || [], false);
+    return buildAnalysis(input, resolvedCenter, raw.elements || [], false);
   } catch (error) {
     console.warn('Browser OSM place fallback unavailable:', error);
     // Do not blank the whole map just because the public POI query service is
     // overloaded. Return a valid center so OpenStreetMap base tiles still render.
-    return buildAnalysis(input, center, [], true);
+    return buildAnalysis(input, resolvedCenter, [], true);
   }
 }

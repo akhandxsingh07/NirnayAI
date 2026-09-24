@@ -167,7 +167,6 @@ export const LiveIntelligencePanel: React.FC<LiveIntelligencePanelProps> = ({
       ) : data ? (
         <div className="space-y-5 p-5 sm:p-6">
           <div className="flex flex-wrap gap-2 text-[10px] font-extrabold tracking-wide">
-            <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-emerald-800">{c.map}: {c.live}</span>
             <span className={`rounded-full px-3 py-1.5 ${data.weather.available ? 'bg-emerald-50 text-emerald-800' : 'bg-stone-100 text-stone-600'}`}>{c.liveWeather}: {data.weather.available ? c.live : '—'}</span>
             <span className={`rounded-full px-3 py-1.5 ${data.mandi.available ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'}`}>{c.officialMandi}: {data.mandi.available ? c.daily : data.mandi.configured ? '—' : 'SETUP'}</span>
             <span className="rounded-full bg-blue-50 px-3 py-1.5 text-blue-800">{c.schemes}: {c.verify}</span>
