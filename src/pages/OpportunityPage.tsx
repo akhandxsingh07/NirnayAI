@@ -38,7 +38,7 @@ export const OpportunityPage: React.FC<OpportunityPageProps> = ({
               <MapPin className="w-5 h-5" />
             </span>
             <h1 className="text-xl sm:text-2xl font-extrabold text-[#2B1B16]">
-              {t('oppTitle', language)}
+              {t('navOpportunity', language)}
             </h1>
           </div>
           <p className="text-xs text-[#8B5E47] mt-1">
@@ -61,6 +61,9 @@ export const OpportunityPage: React.FC<OpportunityPageProps> = ({
           state={formData.location.state}
           category={formData.category}
           language={language}
+          latitude={formData.location.latitude}
+          longitude={formData.location.longitude}
+          village={formData.location.village}
         />
       </section>
 

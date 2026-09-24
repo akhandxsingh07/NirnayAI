@@ -16,13 +16,18 @@ import {
   type LiveMarketAnalysis,
   type LiveMarketPlace,
   type LivePlaceKind,
+  knownDistrictCenter,
 } from '../services/liveMapService';
+import { InteractiveMarketMap } from './InteractiveMarketMap';
 
 interface LiveMarketMapProps {
   district: string;
   state: string;
   category: string;
   language: LanguageCode;
+  latitude?: number;
+  longitude?: number;
+  village?: string;
 }
 
 type Copy = {
@@ -58,47 +63,10 @@ const COPY: Record<LanguageCode, Copy> = {
   pa: { title: 'ਲਾਈਵ ਮਾਰਕੀਟ ਮੈਪ', subtitle: 'ਚੁਣੇ ਬਾਜ਼ਾਰ ਦੇ ਆਲੇ-ਦੁਆਲੇ ਮੌਜੂਦਾ OpenStreetMap ਸਥਾਨ', live: 'ਲਾਈਵ ਡਾਟਾ', useLocation: 'ਮੇਰੀ ਲੋਕੇਸ਼ਨ ਵਰਤੋ', districtCenter: 'ਜ਼ਿਲ੍ਹਾ ਕੇਂਦਰ ਵਰਤੋ', refresh: 'ਰਿਫ੍ਰੈਸ਼', loading: 'ਨੇੜਲੇ ਮਾਰਕੀਟ ਸਥਾਨ ਲੱਭੇ ਜਾ ਰਹੇ ਹਨ...', failed: 'ਲਾਈਵ ਮੈਪ ਲੋਡ ਨਹੀਂ ਹੋਇਆ। ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।', competitors: 'ਮੁਕਾਬਲੇਬਾਜ਼', customers: 'ਗਾਹਕ ਕੇਂਦਰ', opportunities: 'ਮੌਕਾ ਕੇਂਦਰ', nearest: 'ਸਭ ਤੋਂ ਨੇੜਲਾ ਮੁਕਾਬਲੇਬਾਜ਼', density: 'ਮੁਕਾਬਲਾ ਘਣਤਾ', all: 'ਸਾਰੇ', locationPermission: 'ਲੋਕੇਸ਼ਨ ਇਜਾਜ਼ਤ ਨਹੀਂ ਮਿਲੀ, ਇਸ ਲਈ ਜ਼ਿਲ੍ਹਾ-ਕੇਂਦਰ ਵਿਸ਼ਲੇਸ਼ਣ ਵਰਤਿਆ ਜਾ ਰਿਹਾ ਹੈ।', sourceNote: 'ਪੇਂਡੂ ਖੇਤਰਾਂ ਵਿੱਚ OpenStreetMap/Overpass ਕਵਰੇਜ ਅਧੂਰੀ ਹੋ ਸਕਦੀ ਹੈ। ਮਹੱਤਵਪੂਰਨ ਸਥਾਨਾਂ ਦੀ ਸਥਾਨਕ ਪੁਸ਼ਟੀ ਕਰੋ।', updated: 'ਅਪਡੇਟ', km: 'ਕਿਮੀ' },
 };
 
-const TILE_SIZE = 256;
-const VIEW_W = 768;
-const VIEW_H = 480;
-
-function project(lat: number, lng: number, zoom: number) {
-  const scale = TILE_SIZE * 2 ** zoom;
-  const safeLat = Math.max(-85.0511, Math.min(85.0511, lat));
-  const sin = Math.sin((safeLat * Math.PI) / 180);
-  return {
-    x: ((lng + 180) / 360) * scale,
-    y: (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * scale,
-  };
-}
-
-function buildTiles(centerLat: number, centerLng: number, zoom: number) {
-  const center = project(centerLat, centerLng, zoom);
-  const left = center.x - VIEW_W / 2;
-  const top = center.y - VIEW_H / 2;
-  const minX = Math.floor(left / TILE_SIZE);
-  const maxX = Math.floor((left + VIEW_W) / TILE_SIZE);
-  const minY = Math.floor(top / TILE_SIZE);
-  const maxY = Math.floor((top + VIEW_H) / TILE_SIZE);
-  const worldTiles = 2 ** zoom;
-  const tiles: Array<{ x: number; y: number; href: string; drawX: number; drawY: number }> = [];
-
-  for (let y = minY; y <= maxY; y += 1) {
-    if (y < 0 || y >= worldTiles) continue;
-    for (let x = minX; x <= maxX; x += 1) {
-      const wrappedX = ((x % worldTiles) + worldTiles) % worldTiles;
-      tiles.push({
-        x,
-        y,
-        href: `https://tile.openstreetmap.org/${zoom}/${wrappedX}/${y}.png`,
-        drawX: x * TILE_SIZE - left,
-        drawY: y * TILE_SIZE - top,
-      });
-    }
-  }
-
-  return { tiles, left, top };
-}
+const MAP_CONTROLS = {
+  en: { zoomIn: 'Zoom in', zoomOut: 'Zoom out', recenter: 'Recenter on selected area', empty: 'NO MAPPED PLACES', unavailable: 'PLACES UNAVAILABLE' },
+  hi: { zoomIn: 'ज़ूम बढ़ाएँ', zoomOut: 'ज़ूम घटाएँ', recenter: 'चुने क्षेत्र पर लौटें', empty: 'स्थान नहीं मिले', unavailable: 'स्थान उपलब्ध नहीं' },
+};
 
 function markerColor(kind: LivePlaceKind) {
   if (kind === 'competitor') return '#B85C4A';
@@ -106,8 +74,9 @@ function markerColor(kind: LivePlaceKind) {
   return '#365E78';
 }
 
-export const LiveMarketMap: React.FC<LiveMarketMapProps> = ({ district, state, category, language }) => {
+export const LiveMarketMap: React.FC<LiveMarketMapProps> = ({ district, state, category, language, latitude, longitude, village }) => {
   const copy = COPY[language] || COPY.en;
+  const controls = language === 'hi' ? MAP_CONTROLS.hi : MAP_CONTROLS.en;
   const [data, setData] = useState<LiveMarketAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -117,12 +86,23 @@ export const LiveMarketMap: React.FC<LiveMarketMapProps> = ({ district, state, c
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [locationNotice, setLocationNotice] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
+  const providedCenter = Number.isFinite(latitude) && Number.isFinite(longitude)
+    ? { lat: Number(latitude), lng: Number(longitude) }
+    : null;
+  const previewCenter = coords || providedCenter || knownDistrictCenter(district);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
     setError('');
-    analyzeLiveMarket({ district, state, category, radiusKm, ...(coords || {}) })
+    setData(null);
+    setSelected(null);
+    analyzeLiveMarket({
+      district, state, category, radiusKm,
+      ...(coords || providedCenter || {}),
+      coordinateSource: coords ? 'live-location' : 'provided-location',
+      locationLabel: coords ? copy.useLocation : village ? `${village}, ${district}` : district,
+    })
       .then((result) => {
         if (!active) return;
         setData(result);
@@ -136,7 +116,7 @@ export const LiveMarketMap: React.FC<LiveMarketMapProps> = ({ district, state, c
         if (active) setLoading(false);
       });
     return () => { active = false; };
-  }, [district, state, category, radiusKm, coords, refreshKey, copy.failed]);
+  }, [district, state, category, radiusKm, coords, refreshKey, copy.failed, copy.useLocation, latitude, longitude, village]);
 
   const useMyLocation = () => {
     if (!navigator.geolocation) {
@@ -158,9 +138,8 @@ export const LiveMarketMap: React.FC<LiveMarketMapProps> = ({ district, state, c
     [data, filter]
   );
 
-  const zoom = radiusKm <= 5 ? 13 : 12;
-  const mapGeometry = data ? buildTiles(data.center.lat, data.center.lng, zoom) : null;
-  const centerWorld = data ? project(data.center.lat, data.center.lng, zoom) : null;
+  const mapCenter = data?.center || previewCenter;
+  const status = data?.coverageStatus || (data?.places.length ? 'complete' : 'empty');
 
   return (
     <div className="overflow-hidden rounded-3xl border border-[#D9B99B]/50 bg-white shadow-[0_18px_55px_rgba(75,48,35,.08)]">
@@ -169,7 +148,7 @@ export const LiveMarketMap: React.FC<LiveMarketMapProps> = ({ district, state, c
           <div className="flex items-center gap-2">
             <MapPin className="h-5 w-5 text-[#7A4D32]" />
             <h3 className="text-base font-black text-[#2B1B16]">{copy.title}</h3>
-            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800">{copy.live}</span>
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${status === 'complete' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'}`}>{loading ? copy.loading : status === 'complete' ? copy.live : status === 'empty' ? controls.empty : controls.unavailable}</span>
           </div>
           <p className="mt-1 text-[11px] text-[#846653]">{copy.subtitle}</p>
         </div>
@@ -196,63 +175,36 @@ export const LiveMarketMap: React.FC<LiveMarketMapProps> = ({ district, state, c
 
       {locationNotice && <div className="border-b border-amber-200 bg-amber-50 px-5 py-2 text-[11px] text-amber-900">{locationNotice}</div>}
 
-      {loading && (
-        <div className="flex min-h-[420px] items-center justify-center gap-2 text-sm font-bold text-[#7A5A49]">
-          <LoaderCircle className="h-5 w-5 animate-spin" /> {copy.loading}
+      <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="min-w-0 border-b border-[#E8D9C8] lg:border-b-0 lg:border-r">
+          {mapCenter ? (
+            <InteractiveMarketMap
+              center={mapCenter}
+              radiusKm={radiusKm}
+              places={visiblePlaces}
+              selectedId={selected?.id}
+              onSelect={setSelected}
+              labels={{ map: copy.title, ...controls }}
+            />
+          ) : (
+            <div className="flex h-[460px] items-center justify-center gap-2 bg-[#EEE8DE] text-sm font-bold text-[#7A5A49]"><LoaderCircle className="h-5 w-5 animate-spin" />{copy.loading}</div>
+          )}
         </div>
-      )}
-
-      {!loading && error && (
-        <div className="flex min-h-[360px] flex-col items-center justify-center gap-3 px-6 text-center">
-          <AlertTriangle className="h-8 w-8 text-amber-700" />
-          <p className="max-w-lg text-sm font-bold text-[#6B4535]">{error || copy.failed}</p>
-          <button onClick={() => setRefreshKey((value) => value + 1)} className="rounded-xl bg-[#4A2F24] px-4 py-2 text-xs font-extrabold text-white">{copy.refresh}</button>
-        </div>
-      )}
-
-      {!loading && !error && data && mapGeometry && centerWorld && (
-        <>
-          <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_300px]">
-            <div className="relative overflow-hidden border-b border-[#E8D9C8] bg-[#EEE8DE] lg:border-b-0 lg:border-r">
-              <svg viewBox={`0 0 ${VIEW_W} ${VIEW_H}`} className="block h-auto w-full" role="img" aria-label={copy.title}>
-                {mapGeometry.tiles.map((tile) => (
-                  <image key={`${tile.x}-${tile.y}`} href={tile.href} x={tile.drawX} y={tile.drawY} width={TILE_SIZE} height={TILE_SIZE} />
-                ))}
-
-                <circle cx={VIEW_W / 2} cy={VIEW_H / 2} r="12" fill="#2B1B16" stroke="#FFFDF8" strokeWidth="4" />
-                <circle cx={VIEW_W / 2} cy={VIEW_H / 2} r="24" fill="none" stroke="#2B1B16" strokeOpacity="0.25" strokeWidth="3" />
-
-                {visiblePlaces.slice(0, 45).map((place) => {
-                  const p = project(place.lat, place.lng, zoom);
-                  const x = p.x - mapGeometry.left;
-                  const y = p.y - mapGeometry.top;
-                  if (x < -20 || y < -20 || x > VIEW_W + 20 || y > VIEW_H + 20) return null;
-                  const active = selected?.id === place.id;
-                  return (
-                    <g key={place.id} onClick={() => setSelected(place)} className="cursor-pointer">
-                      {active && <circle cx={x} cy={y} r="14" fill="none" stroke="#2B1B16" strokeWidth="2" />}
-                      <circle cx={x} cy={y} r={active ? 9 : 7} fill={markerColor(place.kind)} stroke="white" strokeWidth="2.5" />
-                    </g>
-                  );
-                })}
-              </svg>
-              <div className="absolute bottom-2 left-2 rounded-lg bg-white/90 px-2 py-1 text-[9px] font-semibold text-[#6B4535] shadow-sm backdrop-blur">
-                © OpenStreetMap contributors
-              </div>
-            </div>
 
             <div className="bg-[#FFFDF8] p-4">
+              {loading && <p role="status" className="mb-3 flex items-center gap-2 text-xs text-[#6B4535]"><LoaderCircle className="h-4 w-4 animate-spin" /> {copy.loading}</p>}
+              {!loading && (error || status !== 'complete') && <p role="status" className="mb-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{error || data?.coverageNote || copy.failed}</p>}
               <div className="grid grid-cols-2 gap-2">
-                <Stat icon={Store} label={copy.competitors} value={data.stats.competitors} />
-                <Stat icon={Users2} label={copy.customers} value={data.stats.customerHubs} />
-                <Stat icon={Building2} label={copy.opportunities} value={data.stats.opportunityHubs} />
-                <Stat icon={Crosshair} label={copy.nearest} value={data.stats.nearestCompetitorKm == null ? '—' : `${data.stats.nearestCompetitorKm} ${copy.km}`} />
+                <Stat icon={Store} label={copy.competitors} value={data?.stats.competitors ?? '—'} />
+                <Stat icon={Users2} label={copy.customers} value={data?.stats.customerHubs ?? '—'} />
+                <Stat icon={Building2} label={copy.opportunities} value={data?.stats.opportunityHubs ?? '—'} />
+                <Stat icon={Crosshair} label={copy.nearest} value={data?.stats.nearestCompetitorKm == null ? '—' : `${data.stats.nearestCompetitorKm} ${copy.km}`} />
               </div>
 
               <div className="mt-3 rounded-2xl border border-[#D9B99B]/50 bg-white p-3">
                 <div className="text-[10px] font-bold uppercase tracking-wider text-[#8B5E47]">{copy.density}</div>
-                <div className="mt-1 text-lg font-black text-[#2B1B16]">{data.stats.competitorDensity}</div>
-                <div className="mt-1 text-[10px] leading-relaxed text-[#846653]">{data.center.label}</div>
+                <div className="mt-1 text-lg font-black text-[#2B1B16]">{data?.stats.competitorDensity ?? '—'}</div>
+                <div className="mt-1 text-[10px] leading-relaxed text-[#846653]">{data?.center.label || (village ? `${village}, ${district}` : district)}</div>
               </div>
 
               {selected && (
@@ -268,8 +220,9 @@ export const LiveMarketMap: React.FC<LiveMarketMapProps> = ({ district, state, c
                 </div>
               )}
             </div>
-          </div>
+      </div>
 
+      {data && (
           <div className="flex flex-col gap-3 border-t border-[#E8D9C8] bg-white px-5 py-4">
             <div className="flex flex-wrap gap-2">
               {([
@@ -284,10 +237,9 @@ export const LiveMarketMap: React.FC<LiveMarketMapProps> = ({ district, state, c
               ))}
             </div>
             <div className="text-[10px] leading-relaxed text-[#846653]">
-              {copy.updated}: {new Date(data.updatedAt).toLocaleTimeString()} · {copy.sourceNote}
+              {copy.updated}: {new Date(data.updatedAt).toLocaleTimeString()} · {data.coverageNote}
             </div>
           </div>
-        </>
       )}
     </div>
   );

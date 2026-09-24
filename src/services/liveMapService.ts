@@ -16,7 +16,7 @@ export interface LiveMarketAnalysis {
     lat: number;
     lng: number;
     label: string;
-    source: 'live-location' | 'district';
+    source: 'live-location' | 'provided-location' | 'district';
   };
   radiusKm: number;
   updatedAt: string;
@@ -27,8 +27,9 @@ export interface LiveMarketAnalysis {
     customerHubs: number;
     opportunityHubs: number;
     nearestCompetitorKm: number | null;
-    competitorDensity: 'Low' | 'Moderate' | 'High';
+    competitorDensity: 'Unknown' | 'Low' | 'Moderate' | 'High';
   };
+  coverageStatus: 'complete' | 'empty' | 'unavailable';
   coverageNote: string;
 }
 
@@ -39,6 +40,8 @@ export interface LiveMarketRequest {
   radiusKm?: number;
   lat?: number;
   lng?: number;
+  locationLabel?: string;
+  coordinateSource?: 'provided-location' | 'live-location';
 }
 
 type Selector = { key: string; values: string[] };
@@ -72,6 +75,10 @@ const KNOWN_DISTRICT_CENTERS: Record<string, { lat: number; lng: number }> = {
   gorakhpur: { lat: 26.827, lng: 83.526 },
   agra: { lat: 27.178, lng: 77.756 },
 };
+
+export function knownDistrictCenter(district: string) {
+  return KNOWN_DISTRICT_CENTERS[district.trim().toLowerCase()] || null;
+}
 
 const CUSTOMER_SELECTORS: Selector[] = [
   { key: 'amenity', values: ['marketplace', 'school', 'college', 'hospital', 'clinic', 'bank', 'bus_station'] },
@@ -137,7 +144,7 @@ function distanceKm(lat1: number, lng1: number, lat2: number, lng2: number) {
 
 async function resolveCenter(input: LiveMarketRequest) {
   if (Number.isFinite(input.lat) && Number.isFinite(input.lng)) {
-    return { lat: Number(input.lat), lng: Number(input.lng), label: input.district || 'Your location', source: 'live-location' as const };
+    return { lat: Number(input.lat), lng: Number(input.lng), label: input.locationLabel || input.district || 'Your location', source: input.coordinateSource || 'live-location' };
   }
 
   const known = KNOWN_DISTRICT_CENTERS[input.district.trim().toLowerCase()];
@@ -168,7 +175,7 @@ async function fetchBrowserOverpass(lat: number, lng: number, radiusMeters: numb
   const selectors = [...competitorSelectors(category), ...CUSTOMER_SELECTORS, ...OPPORTUNITY_SELECTORS];
   const unique = new Map(selectors.map((selector) => [`${selector.key}:${selector.values.join(',')}`, selector]));
   const body = Array.from(unique.values()).map((selector) => selectorToOverpass(selector, radiusMeters, lat, lng)).join('\n');
-  const query = `[out:json][timeout:16];\n(\n${body}\n);\nout center tags;`;
+  const query = `[out:json][timeout:16];\n(\n${body}\n);\nout center;`;
   const endpoints = [
     'https://overpass.private.coffee/api/interpreter',
     'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
@@ -250,10 +257,13 @@ function buildAnalysis(
       customerHubs: customerHubs.length,
       opportunityHubs: opportunityHubs.length,
       nearestCompetitorKm: competitorPlaces[0]?.distanceKm ?? null,
-      competitorDensity: competitorPlaces.length >= 12 ? 'High' : competitorPlaces.length >= 5 ? 'Moderate' : 'Low',
+      competitorDensity: !competitorPlaces.length ? 'Unknown' : competitorPlaces.length >= 12 ? 'High' : competitorPlaces.length >= 5 ? 'Moderate' : 'Low',
     },
+    coverageStatus: degraded ? 'unavailable' : limited.length ? 'complete' : 'empty',
     coverageNote: degraded
       ? 'Base OpenStreetMap is available. Live nearby-place analysis is temporarily degraded because public OSM data servers are busy; retry later for markers.'
+      : !limited.length
+        ? 'No mapped places were returned in this radius. This does not mean there are no real businesses or customers; try another radius or verify locally.'
       : 'Live OpenStreetMap/Overpass data can be incomplete in rural areas. Use it as decision support and verify important places locally.',
   };
 }
@@ -265,6 +275,9 @@ export async function analyzeLiveMarket(input: LiveMarketRequest): Promise<LiveM
     category: input.category,
     radiusKm: String(input.radiusKm || 5),
   });
+
+  if (input.locationLabel) params.set('label', input.locationLabel);
+  if (input.coordinateSource) params.set('coordinateSource', input.coordinateSource);
 
   if (Number.isFinite(input.lat) && Number.isFinite(input.lng)) {
     params.set('lat', String(input.lat));

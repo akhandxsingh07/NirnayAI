@@ -16,7 +16,7 @@ type LivePlace = {
 };
 
 type LiveMapPayload = {
-  center: { lat: number; lng: number; label: string; source: 'live-location' | 'district' };
+  center: { lat: number; lng: number; label: string; source: 'live-location' | 'provided-location' | 'district' };
   radiusKm: number;
   updatedAt: string;
   places: LivePlace[];
@@ -26,8 +26,9 @@ type LiveMapPayload = {
     customerHubs: number;
     opportunityHubs: number;
     nearestCompetitorKm: number | null;
-    competitorDensity: 'Low' | 'Moderate' | 'High';
+    competitorDensity: 'Unknown' | 'Low' | 'Moderate' | 'High';
   };
+  coverageStatus: 'complete' | 'empty';
   coverageNote: string;
 };
 
@@ -211,7 +212,8 @@ async function fetchOverpass(lat: number, lng: number, radiusMeters: number, cat
   const selectors = [...competitorSelectors(category), ...CUSTOMER_SELECTORS, ...OPPORTUNITY_SELECTORS];
   const unique = new Map(selectors.map((selector) => [`${selector.key}:${selector.values.join(',')}`, selector]));
   const body = Array.from(unique.values()).map((selector) => selectorToOverpass(selector, radiusMeters, lat, lng)).join('\n');
-  const query = `[out:json][timeout:18];\n(\n${body}\n);\nout center tags;`;
+  // `out tags` omits geometry, even when combined with `center`. Keep coordinates.
+  const query = `[out:json][timeout:18];\n(\n${body}\n);\nout center;`;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20000);
   try {
@@ -446,13 +448,16 @@ export function registerLiveMapRoutes(app: Express) {
     const radiusKm = clamp(Number.isFinite(requestedRadiusKm) ? requestedRadiusKm : 5, 2, 10);
     const requestedLat = Number(req.query.lat);
     const requestedLng = Number(req.query.lng);
-    const hasLiveCoordinates = Number.isFinite(requestedLat) && Number.isFinite(requestedLng);
+    const hasLiveCoordinates = Number.isFinite(requestedLat) && Number.isFinite(requestedLng)
+      && requestedLat >= -90 && requestedLat <= 90 && requestedLng >= -180 && requestedLng <= 180;
+    const suppliedLabel = String(req.query.label || '').trim().slice(0, 120);
+    const coordinateSource = req.query.coordinateSource === 'provided-location' ? 'provided-location' : 'live-location';
 
     try {
       let lat = requestedLat;
       let lng = requestedLng;
-      let label = district || 'Selected area';
-      let source: LiveMapPayload['center']['source'] = 'live-location';
+      let label = suppliedLabel || district || 'Selected area';
+      let source: LiveMapPayload['center']['source'] = coordinateSource;
 
       if (!hasLiveCoordinates) {
         if (!district) return res.status(400).json({ error: 'District or live coordinates are required.' });
@@ -464,7 +469,7 @@ export function registerLiveMapRoutes(app: Express) {
         source = 'district';
       }
 
-      const cacheKey = `${lat.toFixed(3)}:${lng.toFixed(3)}:${radiusKm}:${category.toLowerCase()}`;
+      const cacheKey = `${lat.toFixed(3)}:${lng.toFixed(3)}:${radiusKm}:${category.toLowerCase()}:${source}:${label}`;
       const cached = mapCache.get(cacheKey);
       if (cached && cached.expiresAt > Date.now()) return res.json(cached.value);
 
@@ -506,6 +511,7 @@ export function registerLiveMapRoutes(app: Express) {
       const opportunityHubs = limitedPlaces.filter((place) => place.kind === 'opportunity');
       const competitorCount = competitorPlaces.length;
 
+      const coverageStatus = limitedPlaces.length ? 'complete' : 'empty';
       const payload: LiveMapPayload = {
         center: { lat, lng, label, source },
         radiusKm,
@@ -517,9 +523,12 @@ export function registerLiveMapRoutes(app: Express) {
           customerHubs: customerHubs.length,
           opportunityHubs: opportunityHubs.length,
           nearestCompetitorKm: competitorPlaces[0]?.distanceKm ?? null,
-          competitorDensity: competitorCount >= 12 ? 'High' : competitorCount >= 5 ? 'Moderate' : 'Low',
+          competitorDensity: !competitorCount ? 'Unknown' : competitorCount >= 12 ? 'High' : competitorCount >= 5 ? 'Moderate' : 'Low',
         },
-        coverageNote: 'Live OpenStreetMap/Overpass data can be incomplete in rural areas. Use it as decision support and verify important places locally.',
+        coverageStatus,
+        coverageNote: coverageStatus === 'empty'
+          ? 'No mapped places were returned in this radius. This does not mean there are no real businesses or customers; try another radius or verify locally.'
+          : 'Live OpenStreetMap/Overpass data can be incomplete in rural areas. Use it as decision support and verify important places locally.',
       };
 
       mapCache.set(cacheKey, { expiresAt: Date.now() + MAP_CACHE_TTL_MS, value: payload });
