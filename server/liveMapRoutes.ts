@@ -88,7 +88,7 @@ type LiveIntelligencePayload = {
   schemes: { source: string; verificationUrl: string; note: string };
 };
 
-const MAP_CACHE_TTL_MS = 5 * 60 * 1000;
+const MAP_CACHE_TTL_MS = 30 * 60 * 1000;
 const INTELLIGENCE_CACHE_TTL_MS = 10 * 60 * 1000;
 const OGD_MANDI_RESOURCE_ID = '9ef84268-d588-465a-a308-a864a43d0070';
 const mapCache = new Map<string, CacheEntry<LiveMapPayload>>();
@@ -166,9 +166,16 @@ function escapeRegex(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function selectorToOverpass(selector: Selector, radius: number, lat: number, lng: number) {
+function selectorToOverpass(selector: Selector, bbox: string) {
   const regex = selector.values.map(escapeRegex).join('|');
-  return `nwr(around:${radius},${lat},${lng})["${selector.key}"~"^(${regex})$"];`;
+  return `nwr["${selector.key}"~"^(${regex})$"](${bbox});`;
+}
+
+function boundingBox(lat: number, lng: number, radiusMeters: number) {
+  const latitudeSpan = radiusMeters / 111_320;
+  const longitudeSpan = radiusMeters / (111_320 * Math.max(0.1, Math.cos(toRadians(lat))));
+  return [lat - latitudeSpan, lng - longitudeSpan, lat + latitudeSpan, lng + longitudeSpan]
+    .map((value) => value.toFixed(5)).join(',');
 }
 
 function readableCategory(tags: Record<string, string>) {
@@ -210,26 +217,37 @@ async function geocodeDistrict(district: string, state: string) {
 
 async function fetchOverpass(lat: number, lng: number, radiusMeters: number, category: string) {
   const selectors = [...competitorSelectors(category), ...CUSTOMER_SELECTORS, ...OPPORTUNITY_SELECTORS];
-  const unique = new Map(selectors.map((selector) => [`${selector.key}:${selector.values.join(',')}`, selector]));
-  const body = Array.from(unique.values()).map((selector) => selectorToOverpass(selector, radiusMeters, lat, lng)).join('\n');
-  // `out tags` omits geometry, even when combined with `center`. Keep coordinates.
-  const query = `[out:json][timeout:18];\n(\n${body}\n);\nout center;`;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20000);
-  try {
-    const response = await fetch('https://overpass-api.de/api/interpreter', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8', 'User-Agent': 'NirnayAI/1.0 (+https://github.com/akhandxsingh07/NirnayAI)' },
-      body: new URLSearchParams({ data: query }).toString(),
-      signal: controller.signal,
-    });
-    if (!response.ok) throw new Error(`Map data failed with ${response.status}`);
-    return (await response.json()) as {
-      elements?: Array<{ type: string; id: number; lat?: number; lon?: number; center?: { lat?: number; lon?: number }; tags?: Record<string, string> }>;
-    };
-  } finally {
-    clearTimeout(timeout);
+  const grouped = new Map<string, Set<string>>();
+  for (const selector of selectors) {
+    const values = grouped.get(selector.key) || new Set<string>();
+    selector.values.forEach((value) => values.add(value));
+    grouped.set(selector.key, values);
   }
+  const bbox = boundingBox(lat, lng, radiusMeters);
+  const body = Array.from(grouped, ([key, values]) => selectorToOverpass({ key, values: [...values] }, bbox)).join('\n');
+  const query = `[out:json][timeout:22];\n(\n${body}\n);\nout center qt;`;
+  let lastError: unknown;
+  for (const endpoint of ['https://maps.mail.ru/osm/tools/overpass/api/interpreter', 'https://overpass.private.coffee/api/interpreter']) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 16000);
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8', 'User-Agent': 'NirnayAI/1.0 (+https://github.com/akhandxsingh07/NirnayAI)' },
+        body: new URLSearchParams({ data: query }).toString(),
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error(`Map data failed with ${response.status}`);
+      return (await response.json()) as {
+        elements?: Array<{ type: string; id: number; lat?: number; lon?: number; center?: { lat?: number; lon?: number }; tags?: Record<string, string> }>;
+      };
+    } catch (error) {
+      lastError = error;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('Map data sources are unavailable');
 }
 
 function numberOrNull(value: unknown) {
@@ -482,6 +500,7 @@ export function registerLiveMapRoutes(app: Express) {
         const pointLat = element.lat ?? element.center?.lat;
         const pointLng = element.lon ?? element.center?.lon;
         if (!Number.isFinite(pointLat) || !Number.isFinite(pointLng)) continue;
+        if (distanceKm(lat, lng, Number(pointLat), Number(pointLng)) > radiusKm) continue;
         const tags = element.tags || {};
         const name = readableName(tags);
         const dedupeKey = `${name.toLowerCase()}:${Number(pointLat).toFixed(4)}:${Number(pointLng).toFixed(4)}`;

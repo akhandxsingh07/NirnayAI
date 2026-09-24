@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Building2,
   Crosshair,
+  ExternalLink,
   LoaderCircle,
   LocateFixed,
   MapPin,
@@ -140,6 +141,10 @@ export const LiveMarketMap: React.FC<LiveMarketMapProps> = ({ district, state, c
 
   const mapCenter = data?.center || previewCenter;
   const status = data?.coverageStatus || (data?.places.length ? 'complete' : 'empty');
+  const placeFeedUnavailable = !loading && (Boolean(error) || status === 'unavailable');
+  const nearbySearchUrl = mapCenter
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${category} near ${mapCenter.lat},${mapCenter.lng}`)}`
+    : null;
 
   return (
     <div className="overflow-hidden rounded-3xl border border-[#D9B99B]/50 bg-white shadow-[0_18px_55px_rgba(75,48,35,.08)]">
@@ -194,10 +199,16 @@ export const LiveMarketMap: React.FC<LiveMarketMapProps> = ({ district, state, c
             <div className="bg-[#FFFDF8] p-4">
               {loading && <p role="status" className="mb-3 flex items-center gap-2 text-xs text-[#6B4535]"><LoaderCircle className="h-4 w-4 animate-spin" /> {copy.loading}</p>}
               {!loading && (error || status !== 'complete') && <p role="status" className="mb-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{error || data?.coverageNote || copy.failed}</p>}
+              {placeFeedUnavailable && nearbySearchUrl && (
+                <a href={nearbySearchUrl} target="_blank" rel="noopener noreferrer" className="mb-3 inline-flex items-center gap-1.5 rounded-xl border border-[#B8C09B] bg-[#F5F7EE] px-3 py-2 text-xs font-bold text-[#46502F] hover:bg-[#EAF0DB]">
+                  {language === 'hi' ? 'Google Maps पर आसपास के व्यवसाय खोजें' : 'Find nearby businesses on Google Maps'}
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              )}
               <div className="grid grid-cols-2 gap-2">
-                <Stat icon={Store} label={copy.competitors} value={data?.stats.competitors ?? '—'} />
-                <Stat icon={Users2} label={copy.customers} value={data?.stats.customerHubs ?? '—'} />
-                <Stat icon={Building2} label={copy.opportunities} value={data?.stats.opportunityHubs ?? '—'} />
+                <Stat icon={Store} label={copy.competitors} value={placeFeedUnavailable ? '—' : data?.stats.competitors ?? '—'} />
+                <Stat icon={Users2} label={copy.customers} value={placeFeedUnavailable ? '—' : data?.stats.customerHubs ?? '—'} />
+                <Stat icon={Building2} label={copy.opportunities} value={placeFeedUnavailable ? '—' : data?.stats.opportunityHubs ?? '—'} />
                 <Stat icon={Crosshair} label={copy.nearest} value={data?.stats.nearestCompetitorKm == null ? '—' : `${data.stats.nearestCompetitorKm} ${copy.km}`} />
               </div>
 

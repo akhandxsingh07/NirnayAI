@@ -125,9 +125,16 @@ function escapeRegex(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function selectorToOverpass(selector: Selector, radius: number, lat: number, lng: number) {
+function selectorToOverpass(selector: Selector, bbox: string) {
   const regex = selector.values.map(escapeRegex).join('|');
-  return `nwr(around:${radius},${lat},${lng})["${selector.key}"~"^(${regex})$"];`;
+  return `nwr["${selector.key}"~"^(${regex})$"](${bbox});`;
+}
+
+function boundingBox(lat: number, lng: number, radiusMeters: number) {
+  const latitudeSpan = radiusMeters / 111_320;
+  const longitudeSpan = radiusMeters / (111_320 * Math.max(0.1, Math.cos(toRadians(lat))));
+  return [lat - latitudeSpan, lng - longitudeSpan, lat + latitudeSpan, lng + longitudeSpan]
+    .map((value) => value.toFixed(5)).join(',');
 }
 
 function toRadians(value: number) {
@@ -173,19 +180,24 @@ async function resolveCenter(input: LiveMarketRequest) {
 
 async function fetchBrowserOverpass(lat: number, lng: number, radiusMeters: number, category: string) {
   const selectors = [...competitorSelectors(category), ...CUSTOMER_SELECTORS, ...OPPORTUNITY_SELECTORS];
-  const unique = new Map(selectors.map((selector) => [`${selector.key}:${selector.values.join(',')}`, selector]));
-  const body = Array.from(unique.values()).map((selector) => selectorToOverpass(selector, radiusMeters, lat, lng)).join('\n');
-  const query = `[out:json][timeout:16];\n(\n${body}\n);\nout center;`;
+  const grouped = new Map<string, Set<string>>();
+  for (const selector of selectors) {
+    const values = grouped.get(selector.key) || new Set<string>();
+    selector.values.forEach((value) => values.add(value));
+    grouped.set(selector.key, values);
+  }
+  const bbox = boundingBox(lat, lng, radiusMeters);
+  const body = Array.from(grouped, ([key, values]) => selectorToOverpass({ key, values: [...values] }, bbox)).join('\n');
+  const query = `[out:json][timeout:22];\n(\n${body}\n);\nout center qt;`;
   const endpoints = [
-    'https://overpass.private.coffee/api/interpreter',
     'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
-    'https://overpass-api.de/api/interpreter',
+    'https://overpass.private.coffee/api/interpreter',
   ];
 
   let lastError: unknown = null;
   for (const endpoint of endpoints) {
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 12000);
+    const timeout = window.setTimeout(() => controller.abort(), 16000);
     try {
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -218,6 +230,7 @@ function buildAnalysis(
     const pointLat = element.lat ?? element.center?.lat;
     const pointLng = element.lon ?? element.center?.lon;
     if (!Number.isFinite(pointLat) || !Number.isFinite(pointLng)) continue;
+    if (distanceKm(center.lat, center.lng, Number(pointLat), Number(pointLng)) > Math.min(10, Math.max(2, input.radiusKm || 5))) continue;
     const tags = element.tags || {};
     const name = readableName(tags);
     const dedupeKey = `${name.toLowerCase()}:${Number(pointLat).toFixed(4)}:${Number(pointLng).toFixed(4)}`;
