@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 
 export type VoiceAudioResult = {
   blob: Blob;
-  engine: 'gemini-tts';
+  engine: 'openai-tts';
 };
 
 export async function requestNirnayVoice(
@@ -24,7 +24,7 @@ export async function requestNirnayVoice(
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify({
-        text: cleanText.slice(0, 4200),
+        text: cleanText.slice(0, 4096),
         language,
       }),
     });
@@ -35,7 +35,7 @@ export async function requestNirnayVoice(
 
     return {
       blob: await response.blob(),
-      engine: 'gemini-tts',
+      engine: 'openai-tts',
     };
   } catch {
     return null;

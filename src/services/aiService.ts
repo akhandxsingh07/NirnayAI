@@ -18,6 +18,7 @@ export interface AIAnalysisResponse {
   insights: Array<{ title: string; description: string; tag: string }>;
   localOpportunity: LocalOpportunityData;
   isAiGenerated: boolean;
+  model?: string;
 }
 
 type LocalCopy = {
@@ -160,6 +161,7 @@ export async function analyzeBusinessWithAI(formData: AssessmentFormData): Promi
             ...(data.localOpportunity || {}),
           },
           isAiGenerated: data.isAiGenerated ?? true,
+          model: data.model,
         };
       }
     }

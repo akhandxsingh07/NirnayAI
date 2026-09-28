@@ -27,7 +27,7 @@ let authenticatedApiFetchInstalled = false;
 /**
  * Adds the active Supabase access token to Nirnay's protected same-origin API
  * calls. This lets the Express server verify the signed-in user before using
- * paid/server-side services such as Gemini.
+ * paid/server-side services such as OpenAI.
  */
 export function installAuthenticatedApiFetch(): void {
   if (authenticatedApiFetchInstalled || typeof window === 'undefined') return;

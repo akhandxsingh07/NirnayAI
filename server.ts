@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'path';
 import { timingSafeEqual } from 'crypto';
 import { createServer as createViteServer } from 'vite';
-import { GoogleGenAI } from '@google/genai';
+import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import { registerLiveMapRoutes } from './server/liveMapRoutes';
@@ -58,13 +58,15 @@ const adminLoginRateLimit = createRateLimiter(15 * 60_000, 8);
 app.use('/api/ai', aiRateLimit);
 registerLiveMapRoutes(app);
 
-let geminiClient: GoogleGenAI | null = null;
-function getGemini(): GoogleGenAI | null {
-  if (!geminiClient && process.env.GEMINI_API_KEY) {
-    geminiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+let openAIClient: OpenAI | null = null;
+function getOpenAI(): OpenAI | null {
+  if (!openAIClient && process.env.OPENAI_API_KEY) {
+    openAIClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 30_000, maxRetries: 1 });
   }
-  return geminiClient;
+  return openAIClient;
 }
+
+const OPENAI_TEXT_MODEL = process.env.OPENAI_TEXT_MODEL || 'gpt-4.1-mini';
 
 function getBearerToken(req: express.Request): string | null {
   const header = req.headers.authorization;
@@ -110,45 +112,12 @@ const LANGUAGE_NAMES: Record<string, string> = {
   pa: 'Punjabi',
 };
 
-const TTS_LANGUAGE_CODES: Record<string, string | undefined> = {
-  en: 'en-IN',
-  hi: 'hi-IN',
-  bn: 'bn-IN',
-  mr: 'mr-IN',
-  ta: 'ta-IN',
-  te: 'te-IN',
-  kn: 'kn-IN',
-  gu: 'gu-IN',
-  pa: undefined,
-};
-
-function pcmToWav(pcm: Buffer, sampleRate = 24000, channels = 1, bitsPerSample = 16) {
-  const bytesPerSample = bitsPerSample / 8;
-  const blockAlign = channels * bytesPerSample;
-  const byteRate = sampleRate * blockAlign;
-  const header = Buffer.alloc(44);
-  header.write('RIFF', 0);
-  header.writeUInt32LE(36 + pcm.length, 4);
-  header.write('WAVE', 8);
-  header.write('fmt ', 12);
-  header.writeUInt32LE(16, 16);
-  header.writeUInt16LE(1, 20);
-  header.writeUInt16LE(channels, 22);
-  header.writeUInt32LE(sampleRate, 24);
-  header.writeUInt32LE(byteRate, 28);
-  header.writeUInt16LE(blockAlign, 32);
-  header.writeUInt16LE(bitsPerSample, 34);
-  header.write('data', 36);
-  header.writeUInt32LE(pcm.length, 40);
-  return Buffer.concat([header, pcm]);
-}
-
 app.get('/api/health', (_req, res) => {
   res.json({
     status: 'ok',
     service: 'NIRNAY AI Server',
     backend: 'Express + Supabase PostgreSQL',
-    hasGeminiApiKey: Boolean(process.env.GEMINI_API_KEY),
+    hasOpenAIApiKey: Boolean(process.env.OPENAI_API_KEY),
     hasDataGovApiKey: Boolean(process.env.DATA_GOV_IN_API_KEY),
     hasSupabase: Boolean(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY),
     hasAdminIdLogin: Boolean(ADMIN_LOGIN_ID && ADMIN_LOGIN_EMAIL),
@@ -221,11 +190,11 @@ app.post('/api/admin/login', adminLoginRateLimit, async (req, res) => {
 
 app.post('/api/ai/analyze', async (req, res) => {
   const auth = await getAuthenticatedUser(req);
-  const ai = getGemini();
+  const ai = getOpenAI();
 
   if (!auth) return res.json({ demoMode: true, isAiGenerated: false, requiresAuth: true });
-  if (!ai || !process.env.GEMINI_API_KEY) {
-    return res.json({ demoMode: true, isAiGenerated: false, requiresGeminiKey: true });
+  if (!ai) {
+    return res.json({ demoMode: true, isAiGenerated: false, requiresOpenAIKey: true });
   }
 
   const formData = req.body;
@@ -265,13 +234,15 @@ Return valid JSON only with this schema:
   "localOpportunity": {"demandSignal": "string","competitorDensity": "string","marketGap": "string","recommendedRadius": "string","suggestedProductMix": ["string"]}
 }`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: { responseMimeType: 'application/json' },
+    const response = await ai.responses.create({
+      model: OPENAI_TEXT_MODEL,
+      input: [{ role: 'user', content: prompt }],
+      text: { format: { type: 'json_object' } },
+      store: false,
     });
-    const parsed = JSON.parse(response.text || '{}');
-    return res.json({ ...parsed, isAiGenerated: true });
+    const parsed = JSON.parse(response.output_text || '{}');
+    if (!parsed.feasibilityScore || !parsed.recommendation || !parsed.swot) throw new Error('Incomplete AI analysis.');
+    return res.json({ ...parsed, isAiGenerated: true, model: OPENAI_TEXT_MODEL });
   } catch (err) {
     console.error('Error generating AI analysis:', err);
     return res.json({ demoMode: true, isAiGenerated: false });
@@ -280,10 +251,10 @@ Return valid JSON only with this schema:
 
 app.post('/api/ai/chat', async (req, res) => {
   const auth = await getAuthenticatedUser(req);
-  const ai = getGemini();
+  const ai = getOpenAI();
 
   if (!auth) return res.json({ demoMode: true, requiresAuth: true });
-  if (!ai || !process.env.GEMINI_API_KEY) return res.json({ demoMode: true, requiresGeminiKey: true });
+  if (!ai) return res.json({ demoMode: true, requiresOpenAIKey: true });
 
   const { question, context = {}, history = [] } = req.body as {
     question?: string;
@@ -344,13 +315,14 @@ RESPONSE RULES
 Return JSON only:
 {"answer":"string","followUps":["3 short follow-up questions in the same selected language"],"confidenceNote":"one short sentence in the same selected language"}`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: { responseMimeType: 'application/json' },
+    const response = await ai.responses.create({
+      model: OPENAI_TEXT_MODEL,
+      input: [{ role: 'user', content: prompt }],
+      text: { format: { type: 'json_object' } },
+      store: false,
     });
-    const parsed = JSON.parse(response.text || '{}') as { answer?: string; followUps?: string[]; confidenceNote?: string };
-    if (!parsed.answer) throw new Error('Gemini returned an empty chat answer.');
+    const parsed = JSON.parse(response.output_text || '{}') as { answer?: string; followUps?: string[]; confidenceNote?: string };
+    if (!parsed.answer) throw new Error('OpenAI returned an empty chat answer.');
 
     return res.json({
       answer: parsed.answer,
@@ -369,40 +341,32 @@ Return JSON only:
 
 app.post('/api/ai/tts', async (req, res) => {
   const auth = await getAuthenticatedUser(req);
-  const ai = getGemini();
+  const ai = getOpenAI();
   if (!auth) return res.status(401).json({ error: 'Authentication required for AI voice.' });
-  if (!ai || !process.env.GEMINI_API_KEY) {
-    return res.status(503).json({ error: 'AI voice is unavailable because Gemini is not configured.' });
+  if (!ai) {
+    return res.status(503).json({ error: 'AI voice is unavailable because OpenAI is not configured.' });
   }
 
   const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
   const language = typeof req.body?.language === 'string' ? req.body.language : 'en';
   if (!text) return res.status(400).json({ error: 'Text is required.' });
-  if (text.length > 4200) return res.status(413).json({ error: 'Voice text is too long.' });
+  if (text.length > 4096) return res.status(413).json({ error: 'Voice text is too long.' });
 
   const languageName = LANGUAGE_NAMES[language] || 'English';
-  const languageCode = TTS_LANGUAGE_CODES[language];
-  const speechConfig: Record<string, unknown> = {
-    voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
-  };
-  if (languageCode) speechConfig.languageCode = languageCode;
-
   try {
-    const ttsPrompt = `Speak naturally, clearly and warmly in ${languageName}. Read only the answer below. Do not add commentary, summarize, or translate it into English. Preserve the selected language, numbers and rupee amounts.\n\n${text}`;
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.1-flash-tts-preview',
-      contents: [{ parts: [{ text: ttsPrompt }] }],
-      config: { responseModalities: ['AUDIO'], speechConfig } as any,
+    const response = await ai.audio.speech.create({
+      model: 'gpt-4o-mini-tts',
+      voice: 'coral',
+      input: text,
+      instructions: `Speak naturally and clearly in ${languageName}. Read only the supplied text, preserving its language, numbers and rupee amounts.`,
+      response_format: 'mp3',
     });
-    const audioPart = response.candidates?.[0]?.content?.parts?.find((part: any) => Boolean(part?.inlineData?.data)) as any;
-    const base64Audio = audioPart?.inlineData?.data;
-    if (!base64Audio) throw new Error('Gemini TTS returned no audio data.');
-
-    const wav = pcmToWav(Buffer.from(base64Audio, 'base64'));
-    res.setHeader('Content-Type', 'audio/wav');
+    const audio = Buffer.from(await response.arrayBuffer());
+    if (!audio.length) throw new Error('OpenAI TTS returned no audio data.');
+    res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('Cache-Control', 'no-store');
-    res.setHeader('X-Nirnay-Voice-Engine', 'gemini-3.1-flash-tts-preview');
-    return res.send(wav);
+    res.setHeader('X-Nirnay-Voice-Engine', 'gpt-4o-mini-tts');
+    return res.send(audio);
   } catch (err) {
     console.error('Error generating multilingual AI voice:', err);
     return res.status(502).json({ error: 'AI voice generation failed.' });

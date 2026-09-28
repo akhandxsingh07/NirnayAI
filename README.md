@@ -1,20 +1,12 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# Nirnay AI
 
-# Run and deploy your AI Studio app
+Rural business advisory and finance planning prototype. The React client and Express API run as one Node.js service.
 
-This contains everything you need to run your app locally.
+## Local setup
 
-View your app in AI Studio: https://ai.studio/apps/755f7d2a-b7c5-4c5d-bb0e-565668e09bbb
+1. Use Node.js 20 or 22 and run `npm ci`.
+2. Copy `.env.example` to `.env` and set `OPENAI_API_KEY` for AI analysis, chat and voice. Keep the key server-side; do not use a `VITE_` prefix.
+3. Run `npm run dev` and open http://localhost:3000.
+4. Run `npm run deploy:check` before deployment.
 
-## Run Locally
-
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+Text responses use `gpt-4.1-mini` by default; optionally set `OPENAI_TEXT_MODEL` to another compatible model. Spoken replies use `gpt-4o-mini-tts`. Without an OpenAI key, analysis and chat use the local fallback; voice falls back to browser speech where supported. See [DEPLOYMENT.md](DEPLOYMENT.md) for Render and Supabase configuration.
