@@ -14,6 +14,7 @@ export interface PersistedAnalysisPayload {
   insights: Array<{ title: string; description: string; tag: string }>;
   localOpportunity: LocalOpportunityData;
   isAiGenerated: boolean;
+  model?: string;
 }
 
 export async function saveAssessmentBundle(
@@ -60,7 +61,7 @@ export async function saveAssessmentBundle(
       swot: analysis.swot,
       insights: analysis.insights,
       local_opportunity: analysis.localOpportunity,
-      model: analysis.isAiGenerated ? 'gemini-2.5-flash' : 'deterministic-fallback',
+      model: analysis.isAiGenerated ? (analysis.model || 'gpt-4.1-mini') : 'deterministic-fallback',
       is_ai_generated: analysis.isAiGenerated,
     }),
     supabase.from('financial_plans').insert({

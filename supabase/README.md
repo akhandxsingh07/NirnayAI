@@ -2,7 +2,7 @@
 
 Project ref: `nllkmunqdkznhnhfrric` (Mumbai / `ap-south-1`).
 
-The production backend uses Supabase Auth + PostgreSQL with Row Level Security (RLS). Express handles protected Gemini endpoints, live-data proxying and the server-side single-admin ID mapping.
+The production backend uses Supabase Auth + PostgreSQL with Row Level Security (RLS). Express handles protected OpenAI endpoints, live-data proxying and the server-side single-admin ID mapping.
 
 ## Core tables
 
@@ -70,7 +70,7 @@ npm run dev
 Create a local `.env` (never commit it):
 
 ```env
-GEMINI_API_KEY=your_server_side_gemini_key
+OPENAI_API_KEY=your_server_side_openai_key
 DATA_GOV_IN_API_KEY=your_data_gov_key
 ADMIN_LOGIN_ID=nirnay-admin
 ADMIN_LOGIN_EMAIL=your_authorised_admin_email
@@ -80,4 +80,4 @@ VITE_SUPABASE_URL=https://nllkmunqdkznhnhfrric.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=your_publishable_key
 ```
 
-Never put a Supabase service-role key, Gemini secret, data.gov.in secret or admin password in `VITE_*` variables or frontend code.
+Never put a Supabase service-role key, OpenAI secret, data.gov.in secret or admin password in `VITE_*` variables or frontend code.

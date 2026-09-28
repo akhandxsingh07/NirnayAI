@@ -1,6 +1,6 @@
 # NirnayAI Deployment Guide
 
-NirnayAI is a single Node.js web service: Vite builds the React client into `dist/client`, Express runs separately from `dist-server`, Supabase provides authentication/database, Gemini powers online AI features, Open-Meteo supplies forecast signals, OpenStreetMap/Overpass supplies mapped-place intelligence, and the optional India OGD connector supplies official daily AGMARKNET mandi records.
+NirnayAI is a single Node.js web service: Vite builds the React client into `dist/client`, Express runs separately from `dist-server`, Supabase provides authentication/database, OpenAI powers online AI features, Open-Meteo supplies forecast signals, OpenStreetMap/Overpass supplies mapped-place intelligence, and the optional India OGD connector supplies official daily AGMARKNET mandi records.
 
 ## Recommended: Render Blueprint
 
@@ -11,7 +11,8 @@ The repository includes `render.yaml`.
    - Build: `npm install --include=dev --no-audit --no-fund && npm run build`
    - Start: `npm start`
    - Health check: `/api/health`
-3. Add `GEMINI_API_KEY` as a Render secret. Never commit it.
+3. Add `OPENAI_API_KEY` as a Render secret. Never commit it.
+   Text uses `gpt-4.1-mini` by default (override with `OPENAI_TEXT_MODEL`); voice uses `gpt-4o-mini-tts`.
 4. Add `DATA_GOV_IN_API_KEY` as a Render secret if official daily mandi records are required.
 5. Add `ADMIN_LOGIN_EMAIL` as a Render secret. It must be the same Supabase Auth user that already has `profiles.role = 'admin'`.
 6. `ADMIN_LOGIN_ID` defaults to `nirnay-admin` in `render.yaml`. Change it in Render if a different private admin username is preferred.
@@ -81,7 +82,7 @@ Then verify:
 1. `/api/health` returns HTTP 200 and shows the expected configuration booleans.
 2. Citizen email login completes on the production domain.
 3. One assessment saves completely to Supabase.
-4. AI analysis works with `GEMINI_API_KEY` configured.
+4. AI analysis works with `OPENAI_API_KEY` configured.
 5. Ask NIRNAY answers in the selected website language.
 6. AI voice plays in the selected language; browser speech fallback works where supported.
 7. Live map analysis loads and labels OSM data as decision support.
@@ -102,7 +103,7 @@ Build and run:
 ```bash
 docker build -t nirnay-ai .
 docker run --rm -p 3000:3000 \
-  -e GEMINI_API_KEY="YOUR_SECRET_KEY" \
+  -e OPENAI_API_KEY="YOUR_SECRET_KEY" \
   -e DATA_GOV_IN_API_KEY="YOUR_DATA_GOV_IN_KEY" \
   -e ADMIN_LOGIN_ID="nirnay-admin" \
   -e ADMIN_LOGIN_EMAIL="YOUR_AUTHORISED_ADMIN_EMAIL" \
@@ -119,7 +120,7 @@ Note: the current Docker build uses repository-default public Vite/Supabase conf
 
 Never commit or expose:
 
-- `GEMINI_API_KEY`
+- `OPENAI_API_KEY`
 - `DATA_GOV_IN_API_KEY`
 - admin password
 - Supabase service-role key

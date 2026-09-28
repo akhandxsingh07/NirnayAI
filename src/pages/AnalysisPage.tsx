@@ -99,7 +99,7 @@ export const AnalysisPage: React.FC<AnalysisPageProps> = ({
         </div>
       </div>
 
-      {!speechSupported && <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-900">Text-to-speech is not supported in this browser. The NIRNAY voice assistant can still use Gemini TTS when configured and signed in.</div>}
+      {!speechSupported && <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-900">Text-to-speech is not supported in this browser. The NIRNAY voice assistant can still use OpenAI TTS when configured and signed in.</div>}
 
       <section className="space-y-3">
         <div className="flex items-center justify-between"><h2 className="text-sm font-bold text-[#2B1B16] uppercase tracking-wider">Overall Enterprise Feasibility</h2><EvidenceBadge type={isAiGenerated ? 'AI_INFERENCE' : 'INDICATIVE'} /></div>
