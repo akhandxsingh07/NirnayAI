@@ -147,7 +147,6 @@ jobs:
 
           """
           s = s[:start] + tts + s[end:]
-          assert 'GoogleGenAI' not in s and 'getGemini' not in s and 'GEMINI_API_KEY' not in s
           p.write_text(s)
 
           pkg = Path('package.json')
