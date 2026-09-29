@@ -1,0 +1,171 @@
+name: Finish OpenAI migration
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    if: github.event.head_commit.message != 'Switch NIRNAY AI from Gemini to OpenAI'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Migrate server and configuration
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json, re
+
+          p = Path('server.ts')
+          s = p.read_text()
+          s = s.replace("import { GoogleGenAI } from '@google/genai';", "import OpenAI from 'openai';")
+          anchor = """const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+            auth: {
+              persistSession: false,
+              autoRefreshToken: false,
+              detectSessionInUrl: false,
+            },
+          });
+          """
+          assert anchor in s
+          s = s.replace(anchor, anchor + """
+          const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
+          const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.6-luna';
+          const OPENAI_TTS_MODEL = process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts';
+          """, 1)
+          s = re.sub(r"let geminiClient: GoogleGenAI \\| null = null;.*?\\n}\\n", "", s, count=1, flags=re.S)
+          s = re.sub(r"\\nfunction pcmToWav\\(.*?\\n}\\n\\napp\\.get\\('/api/health'", "\\napp.get('/api/health'", s, count=1, flags=re.S)
+          s = s.replace("hasGeminiApiKey: Boolean(process.env.GEMINI_API_KEY),", "hasOpenAiApiKey: Boolean(process.env.OPENAI_API_KEY),")
+
+          guard = """  const ai = getGemini();
+
+            if (!auth) return res.json({ demoMode: true, isAiGenerated: false, requiresAuth: true });
+            if (!ai || !process.env.GEMINI_API_KEY) {
+              return res.json({ demoMode: true, isAiGenerated: false, requiresGeminiKey: true });
+            }"""
+          replacement = """  if (!auth) return res.json({ demoMode: true, isAiGenerated: false, requiresAuth: true });
+            if (!openai) {
+              return res.json({ demoMode: true, isAiGenerated: false, requiresOpenAiKey: true });
+            }"""
+          assert guard in s
+          s = s.replace(guard, replacement, 1)
+
+          old = """    const response = await ai.models.generateContent({
+              model: 'gemini-2.5-flash',
+              contents: prompt,
+              config: { responseMimeType: 'application/json' },
+            });
+            const parsed = JSON.parse(response.text || '{}');"""
+          new = """    const response = await openai.chat.completions.create({
+              model: OPENAI_MODEL,
+              temperature: 0.2,
+              response_format: { type: 'json_object' },
+              messages: [
+                { role: 'system', content: 'Return only valid JSON. Do not wrap it in markdown.' },
+                { role: 'user', content: prompt },
+              ],
+            });
+            const content = response.choices[0]?.message?.content || '{}';
+            const parsed = JSON.parse(content);"""
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          chat_guard = """  const ai = getGemini();
+
+            if (!auth) return res.json({ demoMode: true, requiresAuth: true });
+            if (!ai || !process.env.GEMINI_API_KEY) return res.json({ demoMode: true, requiresGeminiKey: true });"""
+          chat_replacement = """  if (!auth) return res.json({ demoMode: true, requiresAuth: true });
+            if (!openai) return res.json({ demoMode: true, requiresOpenAiKey: true });"""
+          assert chat_guard in s
+          s = s.replace(chat_guard, chat_replacement, 1)
+
+          old_chat = """    const response = await ai.models.generateContent({
+              model: 'gemini-2.5-flash',
+              contents: prompt,
+              config: { responseMimeType: 'application/json' },
+            });
+            const parsed = JSON.parse(response.text || '{}') as { answer?: string; followUps?: string[]; confidenceNote?: string };
+            if (!parsed.answer) throw new Error('Gemini returned an empty chat answer.');"""
+          new_chat = """    const response = await openai.chat.completions.create({
+              model: OPENAI_MODEL,
+              temperature: 0.4,
+              response_format: { type: 'json_object' },
+              messages: [
+                { role: 'system', content: 'Return only valid JSON. Do not wrap it in markdown.' },
+                { role: 'user', content: prompt },
+              ],
+            });
+            const content = response.choices[0]?.message?.content || '{}';
+            const parsed = JSON.parse(content) as { answer?: string; followUps?: string[]; confidenceNote?: string };
+            if (!parsed.answer) throw new Error('OpenAI returned an empty chat answer.');"""
+          assert old_chat in s
+          s = s.replace(old_chat, new_chat, 1)
+
+          start = s.index("app.post('/api/ai/tts'")
+          end = s.index('async function startServer()', start)
+          tts = """app.post('/api/ai/tts', async (req, res) => {
+            const auth = await getAuthenticatedUser(req);
+            if (!auth) return res.status(401).json({ error: 'Authentication required for AI voice.' });
+            if (!openai) return res.status(503).json({ error: 'AI voice is unavailable because OpenAI is not configured.' });
+
+            const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
+            const language = typeof req.body?.language === 'string' ? req.body.language : 'en';
+            if (!text) return res.status(400).json({ error: 'Text is required.' });
+            if (text.length > 4200) return res.status(413).json({ error: 'Voice text is too long.' });
+
+            const languageName = LANGUAGE_NAMES[language] || 'English';
+            const languageCode = TTS_LANGUAGE_CODES[language];
+            try {
+              const instructions = `Speak naturally, clearly and warmly in ${languageName}. Read only the supplied text. Do not add commentary, summarize, or translate it into English. Preserve the selected language, numbers and rupee amounts.${languageCode ? ` Use Indian ${languageName} pronunciation where natural.` : ''}`;
+              const audio = await openai.audio.speech.create({
+                model: OPENAI_TTS_MODEL,
+                voice: 'alloy',
+                input: text,
+                response_format: 'wav',
+                instructions,
+              });
+              const audioBuffer = Buffer.from(await audio.arrayBuffer());
+              res.setHeader('Content-Type', 'audio/wav');
+              res.setHeader('Cache-Control', 'no-store');
+              res.setHeader('X-Nirnay-Voice-Engine', OPENAI_TTS_MODEL);
+              return res.send(audioBuffer);
+            } catch (err) {
+              console.error('Error generating multilingual AI voice:', err);
+              return res.status(502).json({ error: 'AI voice generation failed.' });
+            }
+          });
+
+          """
+          s = s[:start] + tts + s[end:]
+          assert 'GoogleGenAI' not in s and 'getGemini' not in s and 'GEMINI_API_KEY' not in s
+          p.write_text(s)
+
+          pkg = Path('package.json')
+          data = json.loads(pkg.read_text())
+          data.get('dependencies', {}).pop('@google/genai', None)
+          data['dependencies']['openai'] = '^6.0.0'
+          pkg.write_text(json.dumps(data, indent=2) + '\\n')
+
+          r = Path('render.yaml')
+          rs = r.read_text().replace('      - key: GEMINI_API_KEY\\n        sync: false\\n', '      - key: OPENAI_API_KEY\\n        sync: false\\n')
+          r.write_text(rs)
+          PY
+      - name: Refresh lockfile and verify build
+        run: npm install --package-lock-only --ignore-scripts && npm run build
+      - name: Remove one-time workflow
+        run: rm -f .github/workflows/finish-openai-migration.yml
+      - name: Commit migration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server.ts package.json package-lock.json render.yaml .github/workflows/finish-openai-migration.yml
+          git commit -m "Switch NIRNAY AI from Gemini to OpenAI"
+          git push
