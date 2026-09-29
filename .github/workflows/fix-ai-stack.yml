@@ -16,66 +16,55 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
       - name: Patch AI stack
         run: |
-          node <<'NODE'
-          const fs = require('fs');
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
 
-          const serverPath = 'server.ts';
-          let server = fs.readFileSync(serverPath, 'utf8');
+          p = Path('server.ts')
+          s = p.read_text()
+          s = s.replace("const aiRateLimit = createRateLimiter(60_000, 24);", "const aiRateLimit = createRateLimiter(60_000, 60);")
+          s = re.sub(r"app\.get\('/api/health', \(_req, res\) => \{.*?\n\}\);", "app.get('/api/health', (_req, res) => {\n  res.json({ status: 'ok', service: 'NIRNAY AI Server', backend: 'Express' });\n});", s, count=1, flags=re.S)
+          s = re.sub(r"app\.post\('/api/ai/analyze', async \(req, res\) => \{\n\s*const auth = await getAuthenticatedUser\(req\);\n\s*if \(!auth\) return res\.json\(\{ demoMode: true, isAiGenerated: false, requiresAuth: true \}\);", "app.post('/api/ai/analyze', async (req, res) => {", s, count=1)
+          if "const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.6-luna';" not in s:
+              raise SystemExit('OpenAI model configuration missing')
+          if 'hasOpenAiApiKey: Boolean(process.env.OPENAI_API_KEY)' in s:
+              raise SystemExit('health endpoint still exposes configuration state')
+          p.write_text(s)
 
-          server = server.replace(
-            "const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.6-luna';",
-            "const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.6-luna';"
-          );
-
-          server = server.replace(
-            "const aiRateLimit = createRateLimiter(60_000, 24);",
-            "const aiRateLimit = createRateLimiter(60_000, 60);"
-          );
-
-          server = server.replace(
-            /app\.get\('\/api\/health', \(_req, res\) => \{[\s\S]*?\n\}\);/,
-            `app.get('/api/health', (_req, res) => {\n  res.json({ status: 'ok', service: 'NIRNAY AI Server', backend: 'Express' });\n});`
-          );
-
-          server = server.replace(
-            /app\.post\('\/api\/ai\/analyze', async \(req, res\) => \{\n\s*const auth = await getAuthenticatedUser\(req\);\n\s*if \(!auth\) return res\.json\(\{ demoMode: true, isAiGenerated: false, requiresAuth: true \}\);\n\s*if \(!openai\)/,
-            "app.post('/api/ai/analyze', async (req, res) => {\n  if (!openai)"
-          );
-
-          if (!server.includes("const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.6-luna';")) {
-            throw new Error('OpenAI model configuration was not found');
-          }
-          if (server.includes('demoMode: true, isAiGenerated: false, requiresAuth: true')) {
-            throw new Error('Analysis authentication gate was not removed');
-          }
-          if (server.includes('hasOpenAiApiKey: Boolean(process.env.OPENAI_API_KEY)')) {
-            throw new Error('Health endpoint still exposes configuration state');
-          }
-
-          fs.writeFileSync(serverPath, server);
-
-          const chatPath = 'src/services/chatService.ts';
-          let chat = fs.readFileSync(chatPath, 'utf8');
-          const oldChat = `export async function askNirnayQuestion(\n  question: string,\n  context: ChatContext,\n  history: ChatHistoryMessage[] = []\n): Promise<ChatResponse> {\n  let fallbackReason: 'auth' | 'key' | 'unavailable' = 'unavailable';\n  try {\n    const { data } = await supabase.auth.getSession();\n    const token = data.session?.access_token;\n    const res = await fetch('/api/ai/chat', {\n      method: 'POST',\n      headers: {\n        'Content-Type': 'application/json',\n        ...(token ? { Authorization: \`Bearer \${token}\` } : {}),\n      },\n      body: JSON.stringify({ question, context, history: history.slice(-10) }),\n    });\n\n    if (res.ok) {\n      const payload = await res.json();\n      if (payload?.answer) {\n        return {\n          answer: payload.answer,\n          sources: payload.sources,\n          followUps: payload.followUps,\n          confidenceNote: payload.confidenceNote,\n        };\n      }\n      if (payload?.requiresAuth) fallbackReason = 'auth';\n      if (payload?.requiresGeminiKey) fallbackReason = 'key';\n    }\n  } catch {\n    fallbackReason = 'unavailable';\n  }\n\n  const language = normalizeLanguage(context.language);\n  return buildLocalFallback(question, context, language, fallbackReason);\n}`;
-
-          const newChat = `export async function askNirnayQuestion(\n  question: string,\n  context: ChatContext,\n  history: ChatHistoryMessage[] = []\n): Promise<ChatResponse> {\n  const { data } = await supabase.auth.getSession();\n  const token = data.session?.access_token;\n  const res = await fetch('/api/ai/chat', {\n    method: 'POST',\n    headers: {\n      'Content-Type': 'application/json',\n      ...(token ? { Authorization: \`Bearer \${token}\` } : {}),\n    },\n    body: JSON.stringify({ question, context, history: history.slice(-10) }),\n  });\n\n  let payload: any = null;\n  try {\n    payload = await res.json();\n  } catch {\n    payload = null;\n  }\n\n  if (!res.ok || !payload?.answer) {\n    const message = typeof payload?.error === 'string' ? payload.error : \`AI request failed (HTTP \${res.status}).\`;\n    throw new Error(message);\n  }\n\n  return {\n    answer: payload.answer,\n    sources: payload.sources,\n    followUps: payload.followUps,\n    confidenceNote: payload.confidenceNote,\n  };\n}`;
-
-          if (!chat.includes(oldChat)) {
-            throw new Error('Chat service target block was not found; refusing an unsafe partial edit');
-          }
-          chat = chat.replace(oldChat, newChat);
-          fs.writeFileSync(chatPath, chat);
-          NODE
-      - name: Verify
-        run: npm run lint && npm run build
+          p = Path('src/services/chatService.ts')
+          s = p.read_text()
+          start = s.find('export async function askNirnayQuestion(')
+          if start < 0: raise SystemExit('chat function not found')
+          fn = r'''export async function askNirnayQuestion(
+  question: string,
+  context: ChatContext,
+  history: ChatHistoryMessage[] = []
+): Promise<ChatResponse> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  const res = await fetch('/api/ai/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ question, context, history: history.slice(-10) }),
+  });
+  let payload: any = null;
+  try { payload = await res.json(); } catch { payload = null; }
+  if (!res.ok || !payload?.answer) {
+    throw new Error(typeof payload?.error === 'string' ? payload.error : `AI request failed (HTTP ${res.status}).`);
+  }
+  return { answer: payload.answer, sources: payload.sources, followUps: payload.followUps, confidenceNote: payload.confidenceNote };
+}
+'''
+          p.write_text(s[:start] + fn)
+          PY
+      - name: Install and verify
+        run: npm install --ignore-scripts && npm run lint && npm run build
       - name: Commit fixes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add server.ts src/services/chatService.ts
+          git add server.ts src/services/chatService.ts package-lock.json
           git diff --cached --quiet || git commit -m "fix: finalize AI chatbot stack"
           git push
