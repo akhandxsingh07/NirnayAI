@@ -1,0 +1,86 @@
+name: Direct OpenAI migration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/direct-openai-migration.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Rewrite Gemini integration to OpenAI
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path('server.ts')
+          s = p.read_text()
+
+          s = s.replace("import { GoogleGenAI } from '@google/genai';", "import OpenAI from 'openai';")
+          s = re.sub(r"let geminiClient: GoogleGenAI \| null = null;\nfunction getGemini\(\): GoogleGenAI \| null \{.*?\n\}\n", "const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;\nconst OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.6-luna';\nconst OPENAI_TTS_MODEL = process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts';\n\n", s, count=1, flags=re.S)
+
+          s = s.replace("  const ai = getGemini();\n\n  if (!auth) return res.json({ demoMode: true, isAiGenerated: false, requiresAuth: true });\n  if (!ai || !process.env.GEMINI_API_KEY) {\n    return res.json({ demoMode: true, isAiGenerated: false, requiresGeminiKey: true });\n  }", "  if (!auth) return res.json({ demoMode: true, isAiGenerated: false, requiresAuth: true });\n  if (!openai) return res.json({ demoMode: true, isAiGenerated: false, requiresOpenAiKey: true });", 1)
+          s = s.replace("  const ai = getGemini();\n\n  if (!auth) return res.json({ demoMode: true, requiresAuth: true });\n  if (!ai || !process.env.GEMINI_API_KEY) return res.json({ demoMode: true, requiresGeminiKey: true });", "  if (!auth) return res.json({ demoMode: true, requiresAuth: true });\n  if (!openai) return res.json({ demoMode: true, requiresOpenAiKey: true });", 1)
+          s = s.replace("  const ai = getGemini();\n  if (!auth) return res.status(401).json({ error: 'Authentication required for AI voice.' });\n  if (!ai || !process.env.GEMINI_API_KEY) {\n    return res.status(503).json({ error: 'AI voice is unavailable because Gemini is not configured.' });\n  }", "  if (!auth) return res.status(401).json({ error: 'Authentication required for AI voice.' });\n  if (!openai) return res.status(503).json({ error: 'AI voice is unavailable because OpenAI is not configured.' });", 1)
+
+          s = re.sub(r"const response = await ai\.models\.generateContent\(\{\n      model: 'gemini-2\.5-flash',\n      contents: prompt,\n      config: \{ responseMimeType: 'application/json' \},\n    \}\);", "const response = await openai!.chat.completions.create({ model: OPENAI_MODEL, temperature: 0.2, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: 'Return only valid JSON.' }, { role: 'user', content: prompt }] });", s)
+          s = s.replace("JSON.parse(response.text || '{}')", "JSON.parse(response.choices[0]?.message?.content || '{}')")
+
+          # Replace the entire TTS endpoint.
+          start = s.find("app.post('/api/ai/tts'")
+          end = s.find('\nasync function startServer()', start)
+          if start >= 0 and end > start:
+              tts = '''app.post('/api/ai/tts', async (req, res) => {
+  const auth = await getAuthenticatedUser(req);
+  if (!auth) return res.status(401).json({ error: 'Authentication required for AI voice.' });
+  if (!openai) return res.status(503).json({ error: 'AI voice is unavailable because OpenAI is not configured.' });
+  const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
+  if (!text) return res.status(400).json({ error: 'Text is required.' });
+  if (text.length > 4200) return res.status(413).json({ error: 'Voice text is too long.' });
+  const language = typeof req.body?.language === 'string' ? req.body.language : 'en';
+  const languageName = LANGUAGE_NAMES[language] || 'English';
+  try {
+    const audio = await openai.audio.speech.create({ model: OPENAI_TTS_MODEL, voice: 'alloy', input: text, response_format: 'wav', instructions: `Speak naturally and clearly in ${languageName}.` });
+    res.setHeader('Content-Type', 'audio/wav');
+    res.setHeader('Cache-Control', 'no-store');
+    return res.send(Buffer.from(await audio.arrayBuffer()));
+  } catch (err) {
+    console.error('Error generating multilingual AI voice:', err);
+    return res.status(502).json({ error: 'AI voice generation failed.' });
+  }
+});
+'''
+              s = s[:start] + tts + s[end:]
+
+          s = s.replace("hasGeminiApiKey: Boolean(process.env.GEMINI_API_KEY),", "hasOpenAiApiKey: Boolean(process.env.OPENAI_API_KEY),")
+          s = s.replace("  return geminiClient;\n}", "  return openai;\n}")
+          s = s.replace("GEMINI_API_KEY", "OPENAI_API_KEY")
+          s = s.replace("@google/genai", "openai")
+          s = s.replace("'openai';\nimport { createClient", "'openai';\nimport { createClient")
+          p.write_text(s)
+          print('Direct rewrite completed')
+          PY
+
+          npm install --package-lock-only --ignore-scripts
+          npm install openai@^6.0.0 --save --ignore-scripts
+          npm run lint
+          npm run build
+          if grep -nE 'GoogleGenAI|getGemini|GEMINI_API_KEY|gemini-2.5-flash|gemini-3.1-flash-tts-preview|@google/genai' server.ts package.json render.yaml; then exit 1; fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server.ts package.json package-lock.json render.yaml
+          git commit -m 'Migrate Nirnay AI backend from Gemini to OpenAI'
+          git push
