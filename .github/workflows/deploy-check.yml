@@ -18,34 +18,60 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Remove chatbot authentication gate
+      - name: Finalize AI stack source fixes
         if: github.event_name == 'push'
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
+
           p = Path('server.ts')
           s = p.read_text()
-          old = """app.post('/api/ai/chat', async (req, res) => {\n  const auth = await getAuthenticatedUser(req);\n  if (!auth) return res.json({ demoMode: true, requiresAuth: true });\n  if (!openai) return res.status(503).json({ error: 'OpenAI is not configured on the server.' });"""
-          new = """app.post('/api/ai/chat', async (req, res) => {\n  // Chat is available without login; authenticated profile data is optional context.\n  if (!openai) return res.status(503).json({ error: 'OpenAI is not configured on the server.' });"""
-          if old in s:
-              p.write_text(s.replace(old, new, 1))
-              print('Removed chatbot authentication gate.')
-          else:
-              print('Chat authentication gate already removed.')
+          s = s.replace("const aiRateLimit = createRateLimiter(60_000, 24);", "const aiRateLimit = createRateLimiter(60_000, 60);")
+          s = re.sub(r"app\.get\('/api/health', \(_req, res\) => \{.*?\n\}\);", "app.get('/api/health', (_req, res) => {\n  res.json({ status: 'ok', service: 'NIRNAY AI Server', backend: 'Express' });\n});", s, count=1, flags=re.S)
+          s = re.sub(r"app\.post\('/api/ai/analyze', async \(req, res\) => \{\n\s*const auth = await getAuthenticatedUser\(req\);\n\s*if \(!auth\) return res\.json\(\{ demoMode: true, isAiGenerated: false, requiresAuth: true \}\);", "app.post('/api/ai/analyze', async (req, res) => {", s, count=1)
+          p.write_text(s)
+
+          p = Path('src/services/chatService.ts')
+          s = p.read_text()
+          start = s.find('export async function askNirnayQuestion(')
+          if start < 0:
+              raise SystemExit('askNirnayQuestion not found')
+          fn = r'''export async function askNirnayQuestion(
+  question: string,
+  context: ChatContext,
+  history: ChatHistoryMessage[] = []
+): Promise<ChatResponse> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  const res = await fetch('/api/ai/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ question, context, history: history.slice(-10) }),
+  });
+  let payload: any = null;
+  try { payload = await res.json(); } catch { payload = null; }
+  if (!res.ok || !payload?.answer) {
+    throw new Error(typeof payload?.error === 'string' ? payload.error : `AI request failed (HTTP ${res.status}).`);
+  }
+  return { answer: payload.answer, sources: payload.sources, followUps: payload.followUps, confidenceNote: payload.confidenceNote };
+}
+'''
+          p.write_text(s[:start] + fn)
           PY
 
-      - name: Commit chatbot fix
+      - name: Commit chatbot and AI fixes
         if: github.event_name == 'push'
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet; then
-            echo "No chatbot source change needed."
+          git add server.ts src/services/chatService.ts
+          if git diff --cached --quiet; then
+            echo "AI source already finalized."
           else
-            git add server.ts
-            git commit -m "fix: allow chatbot to reach OpenAI without login"
+            git commit -m "fix: finalize AI chatbot stack"
             git push
           fi
 
@@ -53,7 +79,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
