@@ -30,7 +30,6 @@ jobs:
 
           s = s.replace("import { GoogleGenAI } from '@google/genai';", "import OpenAI from 'openai';")
 
-          # Remove the existing Gemini client block by stable markers rather than a fragile regex.
           a = s.find('let geminiClient:')
           b = s.find('function getBearerToken', a)
           if a >= 0 and b > a:
@@ -47,7 +46,6 @@ jobs:
           s = s.replace("requiresGeminiKey", "requiresOpenAiKey")
           s = s.replace("hasGeminiApiKey: Boolean(process.env.GEMINI_API_KEY)", "hasOpenAiApiKey: Boolean(process.env.OPENAI_API_KEY)")
 
-          # Replace every Gemini generateContent call without relying on indentation.
           old = 'const response = await ai.models.generateContent({'
           replacement = """const response = await openai.chat.completions.create({
       model: OPENAI_MODEL,
@@ -61,7 +59,6 @@ jobs:
           count = 0
           while old in s:
               start = s.index(old)
-              # The Gemini call has a balanced object literal and ends at the first ');' after it.
               depth = 0
               in_single = in_double = in_template = False
               escape = False
@@ -97,7 +94,8 @@ jobs:
           if count < 2:
               raise SystemExit('Expected both AI analysis and chat Gemini calls')
 
-          # Replace the TTS route wholesale if present.
+          s = s.replace("response.text || '{}'", "response.choices[0]?.message?.content || '{}'")
+
           start = s.find("app.post('/api/ai/tts'")
           end = s.find('async function startServer()', start)
           if start >= 0 and end > start:
@@ -160,3 +158,5 @@ jobs:
           git diff --cached --quiet && echo 'No changes to commit' && exit 0
           git commit -m "Switch NIRNAY AI from Gemini to OpenAI"
           git push
+
+# Triggered migration uses the existing main branch so Render can auto-deploy the resulting commit.
