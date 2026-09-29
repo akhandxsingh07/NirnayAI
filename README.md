@@ -10,9 +10,9 @@ AI-driven hyper-local business advisory and financial structuring assistant.
 
 **Prerequisites:** Node.js 20–22
 
-1. Install dependencies:
-   `npm install`
+1. Install dependencies: `npm install`
 2. Set `OPENAI_API_KEY` in `.env.local`.
 3. Optionally set `OPENAI_MODEL` (default: `gpt-5.6-luna`).
-4. Run the app:
-   `npm run dev`
+4. Run: `npm run dev`
+
+AI provider: OpenAI.
