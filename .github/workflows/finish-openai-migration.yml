@@ -22,7 +22,7 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import json, re
+          import json
 
           p = Path('server.ts')
           s = p.read_text()
@@ -41,8 +41,12 @@ jobs:
           const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.6-luna';
           const OPENAI_TTS_MODEL = process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts';
           """, 1)
-          s = re.sub(r"let geminiClient: GoogleGenAI \\| null = null;.*?\\n}\\n", "", s, count=1, flags=re.S)
-          s = re.sub(r"\\nfunction pcmToWav\\(.*?\\n}\\n\\napp\\.get\\('/api/health'", "\\napp.get('/api/health'", s, count=1, flags=re.S)
+          start = s.index('let geminiClient: GoogleGenAI')
+          end = s.index('function getBearerToken', start)
+          s = s[:start] + s[end:]
+          start = s.index('function pcmToWav(')
+          end = s.index("app.get('/api/health'", start)
+          s = s[:start] + s[end:]
           s = s.replace("hasGeminiApiKey: Boolean(process.env.GEMINI_API_KEY),", "hasOpenAiApiKey: Boolean(process.env.OPENAI_API_KEY),")
 
           guard = """  const ai = getGemini();
@@ -115,12 +119,10 @@ jobs:
             const auth = await getAuthenticatedUser(req);
             if (!auth) return res.status(401).json({ error: 'Authentication required for AI voice.' });
             if (!openai) return res.status(503).json({ error: 'AI voice is unavailable because OpenAI is not configured.' });
-
             const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
             const language = typeof req.body?.language === 'string' ? req.body.language : 'en';
             if (!text) return res.status(400).json({ error: 'Text is required.' });
             if (text.length > 4200) return res.status(413).json({ error: 'Voice text is too long.' });
-
             const languageName = LANGUAGE_NAMES[language] || 'English';
             const languageCode = TTS_LANGUAGE_CODES[language];
             try {
@@ -152,10 +154,10 @@ jobs:
           data = json.loads(pkg.read_text())
           data.get('dependencies', {}).pop('@google/genai', None)
           data['dependencies']['openai'] = '^6.0.0'
-          pkg.write_text(json.dumps(data, indent=2) + '\\n')
+          pkg.write_text(json.dumps(data, indent=2) + '\n')
 
           r = Path('render.yaml')
-          rs = r.read_text().replace('      - key: GEMINI_API_KEY\\n        sync: false\\n', '      - key: OPENAI_API_KEY\\n        sync: false\\n')
+          rs = r.read_text().replace('      - key: GEMINI_API_KEY\n        sync: false\n', '      - key: OPENAI_API_KEY\n        sync: false\n')
           r.write_text(rs)
           PY
       - name: Refresh lockfile and verify build
