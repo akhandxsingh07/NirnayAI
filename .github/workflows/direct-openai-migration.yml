@@ -1,4 +1,4 @@
-name: Direct OpenAI migration
+name: Final AI stack fix
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  migrate:
+  fix:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,68 +19,66 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Rewrite Gemini integration to OpenAI
+      - run: npm ci
+      - name: Fix backend and frontend AI fallbacks
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
           import re
-          p = Path('server.ts')
-          s = p.read_text()
 
-          s = s.replace("import { GoogleGenAI } from '@google/genai';", "import OpenAI from 'openai';")
-          s = re.sub(r"let geminiClient: GoogleGenAI \| null = null;\nfunction getGemini\(\): GoogleGenAI \| null \{.*?\n\}\n", "const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;\nconst OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.6-luna';\nconst OPENAI_TTS_MODEL = process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts';\n\n", s, count=1, flags=re.S)
+          server = Path('server.ts')
+          s = server.read_text()
+          s = s.replace("const aiRateLimit = createRateLimiter(60_000, 24);", "const aiRateLimit = createRateLimiter(60_000, 60);")
+          s = re.sub(r"app\.get\('/api/health', \(_req, res\) => \{.*?\n\}\);", "app.get('/api/health', (_req, res) => {\n  res.json({ status: 'ok', service: 'NIRNAY AI Server', backend: 'Express' });\n});", s, count=1, flags=re.S)
+          s = re.sub(r"app\.post\('/api/ai/analyze', async \(req, res\) => \{\n\s*const auth = await getAuthenticatedUser\(req\);\n\s*if \(!auth\) return res\.json\(\{ demoMode: true, isAiGenerated: false, requiresAuth: true \}\);", "app.post('/api/ai/analyze', async (req, res) => {", s, count=1)
+          server.write_text(s)
 
-          s = s.replace("  const ai = getGemini();\n\n  if (!auth) return res.json({ demoMode: true, isAiGenerated: false, requiresAuth: true });\n  if (!ai || !process.env.GEMINI_API_KEY) {\n    return res.json({ demoMode: true, isAiGenerated: false, requiresGeminiKey: true });\n  }", "  if (!auth) return res.json({ demoMode: true, isAiGenerated: false, requiresAuth: true });\n  if (!openai) return res.json({ demoMode: true, isAiGenerated: false, requiresOpenAiKey: true });", 1)
-          s = s.replace("  const ai = getGemini();\n\n  if (!auth) return res.json({ demoMode: true, requiresAuth: true });\n  if (!ai || !process.env.GEMINI_API_KEY) return res.json({ demoMode: true, requiresGeminiKey: true });", "  if (!auth) return res.json({ demoMode: true, requiresAuth: true });\n  if (!openai) return res.json({ demoMode: true, requiresOpenAiKey: true });", 1)
-          s = s.replace("  const ai = getGemini();\n  if (!auth) return res.status(401).json({ error: 'Authentication required for AI voice.' });\n  if (!ai || !process.env.GEMINI_API_KEY) {\n    return res.status(503).json({ error: 'AI voice is unavailable because Gemini is not configured.' });\n  }", "  if (!auth) return res.status(401).json({ error: 'Authentication required for AI voice.' });\n  if (!openai) return res.status(503).json({ error: 'AI voice is unavailable because OpenAI is not configured.' });", 1)
+          chat = Path('src/services/chatService.ts')
+          c = chat.read_text()
+          start = c.find('export async function askNirnayQuestion(')
+          if start < 0:
+              raise SystemExit('chat function not found')
+          new_fn = r'''export async function askNirnayQuestion(
+  question: string,
+  context: ChatContext,
+  history: ChatHistoryMessage[] = []
+): Promise<ChatResponse> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  const res = await fetch('/api/ai/chat', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ question, context, history: history.slice(-10) }),
+  });
 
-          s = re.sub(r"const response = await ai\.models\.generateContent\(\{\n      model: 'gemini-2\.5-flash',\n      contents: prompt,\n      config: \{ responseMimeType: 'application/json' \},\n    \}\);", "const response = await openai!.chat.completions.create({ model: OPENAI_MODEL, temperature: 0.2, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: 'Return only valid JSON.' }, { role: 'user', content: prompt }] });", s)
-          s = s.replace("JSON.parse(response.text || '{}')", "JSON.parse(response.choices[0]?.message?.content || '{}')")
-
-          # Replace the entire TTS endpoint.
-          start = s.find("app.post('/api/ai/tts'")
-          end = s.find('\nasync function startServer()', start)
-          if start >= 0 and end > start:
-              tts = '''app.post('/api/ai/tts', async (req, res) => {
-  const auth = await getAuthenticatedUser(req);
-  if (!auth) return res.status(401).json({ error: 'Authentication required for AI voice.' });
-  if (!openai) return res.status(503).json({ error: 'AI voice is unavailable because OpenAI is not configured.' });
-  const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
-  if (!text) return res.status(400).json({ error: 'Text is required.' });
-  if (text.length > 4200) return res.status(413).json({ error: 'Voice text is too long.' });
-  const language = typeof req.body?.language === 'string' ? req.body.language : 'en';
-  const languageName = LANGUAGE_NAMES[language] || 'English';
-  try {
-    const audio = await openai.audio.speech.create({ model: OPENAI_TTS_MODEL, voice: 'alloy', input: text, response_format: 'wav', instructions: `Speak naturally and clearly in ${languageName}.` });
-    res.setHeader('Content-Type', 'audio/wav');
-    res.setHeader('Cache-Control', 'no-store');
-    return res.send(Buffer.from(await audio.arrayBuffer()));
-  } catch (err) {
-    console.error('Error generating multilingual AI voice:', err);
-    return res.status(502).json({ error: 'AI voice generation failed.' });
+  let payload: any = null;
+  try { payload = await res.json(); } catch { payload = null; }
+  if (!res.ok || !payload?.answer) {
+    const message = typeof payload?.error === 'string' ? payload.error : `AI request failed (HTTP ${res.status}).`;
+    throw new Error(message);
   }
-});
+  return {
+    answer: payload.answer,
+    sources: payload.sources,
+    followUps: payload.followUps,
+    confidenceNote: payload.confidenceNote,
+  };
+}
 '''
-              s = s[:start] + tts + s[end:]
-
-          s = s.replace("hasGeminiApiKey: Boolean(process.env.GEMINI_API_KEY),", "hasOpenAiApiKey: Boolean(process.env.OPENAI_API_KEY),")
-          s = s.replace("  return geminiClient;\n}", "  return openai;\n}")
-          s = s.replace("GEMINI_API_KEY", "OPENAI_API_KEY")
-          s = s.replace("@google/genai", "openai")
-          s = s.replace("'openai';\nimport { createClient", "'openai';\nimport { createClient")
-          p.write_text(s)
-          print('Direct rewrite completed')
+          c = c[:start] + new_fn
+          chat.write_text(c)
           PY
 
-          npm install --package-lock-only --ignore-scripts
-          npm install openai@^6.0.0 --save --ignore-scripts
           npm run lint
           npm run build
-          if grep -nE 'GoogleGenAI|getGemini|GEMINI_API_KEY|gemini-2.5-flash|gemini-3.1-flash-tts-preview|@google/genai' server.ts package.json render.yaml; then exit 1; fi
+          if grep -R -nE 'GoogleGenAI|getGemini|GEMINI_API_KEY|gemini-2.5-flash|@google/genai' server.ts package.json src/services/chatService.ts; then exit 1; fi
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add server.ts package.json package-lock.json render.yaml
-          git commit -m 'Migrate Nirnay AI backend from Gemini to OpenAI'
+          git add server.ts src/services/chatService.ts
+          git diff --cached --quiet || git commit -m 'fix: finalize AI chatbot stack'
           git push
