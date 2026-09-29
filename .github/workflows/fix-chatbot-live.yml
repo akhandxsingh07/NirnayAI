@@ -1,0 +1,55 @@
+name: Apply final chatbot runtime fixes
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.head_commit.message != 'chore: apply chatbot runtime patch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch chatbot runtime
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          server = Path('server.ts')
+          s = server.read_text()
+          s = s.replace("const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.6-luna';", "const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';")
+          s = s.replace("const aiRateLimit = createRateLimiter(60_000, 24);", "const aiRateLimit = createRateLimiter(60_000, 40);")
+          old = """app.get('/api/health', (_req, res) => {\n  res.json({\n    status: 'ok',\n    service: 'NIRNAY AI Server',\n    backend: 'Express + Supabase PostgreSQL',\n    hasOpenAiApiKey: Boolean(process.env.OPENAI_API_KEY),\n    hasDataGovApiKey: Boolean(process.env.DATA_GOV_IN_API_KEY),\n    hasSupabase: Boolean(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY),"""
+          new = """app.get('/api/health', (_req, res) => {\n  res.json({\n    status: 'ok',\n    service: 'NIRNAY AI Server',\n    backend: 'Express + Supabase PostgreSQL',"""
+          if old not in s:
+              raise SystemExit('health block not found')
+          s = s.replace(old, new)
+          server.write_text(s)
+
+          ai = Path('src/services/aiService.ts')
+          a = ai.read_text()
+          old_fallback = """  const language = (context.language || 'en') as LanguageCode;\n  if (language === 'hi') {\n    return {\n      answer: `आपके ${context.businessIdea || context.category || 'व्यवसाय'} के लिए पहले स्थानीय मांग जांचें, फिर न्यूनतम व्यवहारिक सेटअप से शुरू करें। उपलब्ध मार्जिन ₹${(context.margin || 50000).toLocaleString('en-IN')} है, इसलिए मशीनरी पर पूरी राशि लगाने के बजाय वर्किंग कैपिटल और सुरक्षा रिज़र्व रखें। योजना/लोन की अंतिम पात्रता आधिकारिक पोर्टल और बैंक से जांचें।`,\n      sources: ['NIRNAY AI Advisory Engine'],\n    };\n  }\n  return {\n    answer: `For your ${context.businessIdea || context.category || 'business'}, validate local demand first and begin with the smallest workable setup. With ₹${(context.margin || 50000).toLocaleString('en-IN')} available margin, keep part of the money as working capital and safety buffer instead of spending everything on equipment. Verify final scheme and loan eligibility with the official portal and lender.`,\n    sources: ['NIRNAY AI Advisory Engine'],\n  };"""
+          new_fallback = """  const language = (context.language || 'en') as LanguageCode;\n  const message = language === 'hi'\n    ? 'AI चैट सेवा अभी उपलब्ध नहीं है। कृपया कुछ सेकंड बाद फिर कोशिश करें।'\n    : 'AI chat is temporarily unavailable. Please try again in a few seconds.';\n  return {\n    answer: message,\n    sources: ['NIRNAY AI'],\n  };"""
+          if old_fallback not in a:
+              raise SystemExit('chat fallback block not found')
+          a = a.replace(old_fallback, new_fallback)
+          ai.write_text(a)
+          PY
+
+      - name: Verify
+        run: |
+          npm ci
+          npm run lint
+          npm run build
+
+      - name: Commit patched source
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server.ts src/services/aiService.ts
+          git diff --cached --quiet || git commit -m 'chore: apply chatbot runtime patch'
+          git push
