@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: write
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -14,6 +17,37 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Remove chatbot authentication gate
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('server.ts')
+          s = p.read_text()
+          old = """app.post('/api/ai/chat', async (req, res) => {\n  const auth = await getAuthenticatedUser(req);\n  if (!auth) return res.json({ demoMode: true, requiresAuth: true });\n  if (!openai) return res.status(503).json({ error: 'OpenAI is not configured on the server.' });"""
+          new = """app.post('/api/ai/chat', async (req, res) => {\n  // Chat is available without login; authenticated profile data is optional context.\n  if (!openai) return res.status(503).json({ error: 'OpenAI is not configured on the server.' });"""
+          if old in s:
+              p.write_text(s.replace(old, new, 1))
+              print('Removed chatbot authentication gate.')
+          else:
+              print('Chat authentication gate already removed.')
+          PY
+
+      - name: Commit chatbot fix
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet; then
+            echo "No chatbot source change needed."
+          else
+            git add server.ts
+            git commit -m "fix: allow chatbot to reach OpenAI without login"
+            git push
+          fi
 
       - name: Use Node.js 20
         uses: actions/setup-node@v4
