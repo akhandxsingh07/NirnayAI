@@ -192,8 +192,7 @@ Return valid JSON only with this schema:
 });
 
 app.post('/api/ai/chat', async (req, res) => {
-  const auth = await getAuthenticatedUser(req);
-  if (!auth) return res.json({ demoMode: true, requiresAuth: true });
+  // Chat is available without login; authenticated profile data is optional context.
   if (!openai) return res.status(503).json({ error: 'OpenAI is not configured on the server.' });
 
   const { question, context = {}, history = [] } = req.body as {
