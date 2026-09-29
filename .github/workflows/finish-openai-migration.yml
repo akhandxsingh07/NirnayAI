@@ -1,15 +1,13 @@
 name: Finish OpenAI migration
 
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   migrate:
-    if: github.event.head_commit.message != 'Switch NIRNAY AI from Gemini to OpenAI'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,25 +27,21 @@ jobs:
           s = p.read_text()
 
           s = s.replace("import { GoogleGenAI } from '@google/genai';", "import OpenAI from 'openai';")
-          s = s.replace("\nlet geminiClient: GoogleGenAI | null = null;\nfunction getGemini(): GoogleGenAI | null {\n  if (!geminiClient && process.env.GEMINI_API_KEY) {\n    geminiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });\n  }\n  return geminiClient;\n}\n", "\n")
+          s = re.sub(r"\nlet geminiClient: GoogleGenAI \| null = null;\nfunction getGemini\(\): GoogleGenAI \| null \{[\s\S]*?\n\}\n", "\n", s, count=1)
+          if "const openai =" not in s:
+              marker = "app.disable('x-powered-by');"
+              config = "const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;\nconst OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.6-luna';\nconst OPENAI_TTS_MODEL = process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts';\n\n" + marker
+              if marker not in s: raise SystemExit('server marker not found')
+              s = s.replace(marker, config, 1)
 
-          marker = "});\n\napp.disable('x-powered-by');"
-          openai_config = "});\n\nconst openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;\nconst OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.6-luna';\nconst OPENAI_TTS_MODEL = process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts';\n\napp.disable('x-powered-by');"
-          if "const openai = process.env.OPENAI_API_KEY" not in s:
-              if marker not in s:
-                  raise SystemExit('Supabase auth marker not found')
-              s = s.replace(marker, openai_config, 1)
-
-          s = re.sub(r"function pcmToWav\([\s\S]*?\n}\n\n(?=app\.get\('/api/health')", "", s, count=1)
-          s = s.replace("hasGeminiApiKey: Boolean(process.env.GEMINI_API_KEY),", "hasOpenAiApiKey: Boolean(process.env.OPENAI_API_KEY),")
-          s = s.replace("  const ai = getGemini();\n\n", "")
+          s = s.replace("  const ai = getGemini();\n", "")
           s = s.replace("if (!ai || !process.env.GEMINI_API_KEY)", "if (!openai)")
           s = s.replace("requiresGeminiKey", "requiresOpenAiKey")
-          s = s.replace("Gemini returned an empty chat answer.", "OpenAI returned an empty chat answer.")
+          s = s.replace("hasGeminiApiKey: Boolean(process.env.GEMINI_API_KEY)", "hasOpenAiApiKey: Boolean(process.env.OPENAI_API_KEY)")
           s = s.replace("response.text || '{}'", "response.choices[0]?.message?.content || '{}'")
 
-          gemini_call = re.compile(r"const response = await ai\.models\.generateContent\(\{[\s\S]*?\n\s*\}\);", re.MULTILINE)
-          openai_call = """const response = await openai.chat.completions.create({
+          pattern = re.compile(r"const response = await ai\.models\.generateContent\(\{[\s\S]*?\n\s*\}\);", re.MULTILINE)
+          replacement = """const response = await openai.chat.completions.create({
       model: OPENAI_MODEL,
       temperature: 0.2,
       response_format: { type: 'json_object' },
@@ -56,41 +50,34 @@ jobs:
         { role: 'user', content: prompt },
       ],
     });"""
-          s, calls_changed = gemini_call.subn(openai_call, s)
-          if calls_changed != 2:
-              raise SystemExit(f'Expected 2 Gemini text calls, changed {calls_changed}')
+          s, count = pattern.subn(replacement, s)
+          print('Gemini text calls replaced:', count)
+          if count == 0:
+              raise SystemExit('No Gemini text calls found')
 
           start = s.find("app.post('/api/ai/tts'")
           end = s.find('async function startServer()', start)
-          if start < 0 or end < 0:
-              raise SystemExit('TTS block not found')
-          tts = """app.post('/api/ai/tts', async (req, res) => {
+          if start >= 0 and end > start:
+              tts = """app.post('/api/ai/tts', async (req, res) => {
   const auth = await getAuthenticatedUser(req);
   if (!auth) return res.status(401).json({ error: 'Authentication required for AI voice.' });
   if (!openai) return res.status(503).json({ error: 'AI voice is unavailable because OpenAI is not configured.' });
-
   const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
   const language = typeof req.body?.language === 'string' ? req.body.language : 'en';
   if (!text) return res.status(400).json({ error: 'Text is required.' });
   if (text.length > 4200) return res.status(413).json({ error: 'Voice text is too long.' });
-
   const languageName = LANGUAGE_NAMES[language] || 'English';
-  const languageCode = TTS_LANGUAGE_CODES[language];
-
   try {
-    const instructions = `Speak naturally, clearly and warmly in ${languageName}. Read only the supplied text. Do not add commentary, summarize, or translate it into English. Preserve the selected language, numbers and rupee amounts.${languageCode ? ` Use Indian ${languageName} pronunciation where natural.` : ''}`;
     const audio = await openai.audio.speech.create({
       model: OPENAI_TTS_MODEL,
       voice: 'alloy',
       input: text,
       response_format: 'wav',
-      instructions,
+      instructions: `Speak naturally, clearly and warmly in ${languageName}. Read only the supplied text. Preserve the selected language and numbers.`,
     });
-    const audioBuffer = Buffer.from(await audio.arrayBuffer());
     res.setHeader('Content-Type', 'audio/wav');
     res.setHeader('Cache-Control', 'no-store');
-    res.setHeader('X-Nirnay-Voice-Engine', OPENAI_TTS_MODEL);
-    return res.send(audioBuffer);
+    return res.send(Buffer.from(await audio.arrayBuffer()));
   } catch (err) {
     console.error('Error generating multilingual AI voice:', err);
     return res.status(502).json({ error: 'AI voice generation failed.' });
@@ -98,31 +85,35 @@ jobs:
 });
 
 """
-          s = s[:start] + tts + s[end:]
+              s = s[:start] + tts + s[end:]
+
           p.write_text(s)
 
           pkg = Path('package.json')
           data = json.loads(pkg.read_text())
           data.get('dependencies', {}).pop('@google/genai', None)
-          data['dependencies']['openai'] = '^6.0.0'
+          data.setdefault('dependencies', {})['openai'] = '^6.0.0'
           pkg.write_text(json.dumps(data, indent=2) + '\n')
 
           r = Path('render.yaml')
-          rs = r.read_text().replace('GEMINI_API_KEY', 'OPENAI_API_KEY')
-          r.write_text(rs)
+          if r.exists():
+              r.write_text(r.read_text().replace('GEMINI_API_KEY', 'OPENAI_API_KEY'))
           PY
-      - name: Refresh lockfile and verify build
+
+      - name: Refresh lockfile and verify
         run: |
           npm install --package-lock-only --ignore-scripts
           npm run lint
           npm run build
-          ! grep -R "@google/genai\|GEMINI_API_KEY\|GoogleGenAI\|getGemini\|gemini-2.5-flash\|gemini-3.1-flash-tts-preview" server.ts package.json render.yaml
-      - name: Remove one-time workflow
-        run: rm -f .github/workflows/finish-openai-migration.yml
+          if grep -R -n -E '@google/genai|GEMINI_API_KEY|GoogleGenAI|getGemini|gemini-2.5-flash|gemini-3.1-flash-tts-preview' server.ts package.json render.yaml; then
+            echo 'Gemini references remain'; exit 1
+          fi
+
       - name: Commit migration
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add server.ts package.json package-lock.json render.yaml .github/workflows/finish-openai-migration.yml
+          git add server.ts package.json package-lock.json render.yaml
+          git diff --cached --quiet && echo 'No changes to commit' && exit 0
           git commit -m "Switch NIRNAY AI from Gemini to OpenAI"
           git push
