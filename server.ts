@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'path';
 import { timingSafeEqual } from 'crypto';
 import { createServer as createViteServer } from 'vite';
-import { GoogleGenAI } from '@google/genai';
+import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import { registerLiveMapRoutes } from './server/liveMapRoutes';
@@ -19,12 +19,12 @@ const ADMIN_LOGIN_ID = process.env.ADMIN_LOGIN_ID?.trim() || 'nirnay-admin';
 const ADMIN_LOGIN_EMAIL = process.env.ADMIN_LOGIN_EMAIL?.trim().toLowerCase() || '';
 
 const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-    detectSessionInUrl: false,
-  },
+  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
 });
+
+const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.6-luna';
+const OPENAI_TTS_MODEL = process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts';
 
 app.disable('x-powered-by');
 app.use(express.json({ limit: '256kb' }));
@@ -45,9 +45,7 @@ function createRateLimiter(windowMs: number, maxRequests: number): express.Reque
     }
     existing.count += 1;
     if (buckets.size > 5000) {
-      for (const [bucketKey, bucket] of buckets) {
-        if (bucket.resetAt <= now) buckets.delete(bucketKey);
-      }
+      for (const [bucketKey, bucket] of buckets) if (bucket.resetAt <= now) buckets.delete(bucketKey);
     }
     return next();
   };
@@ -57,14 +55,6 @@ const aiRateLimit = createRateLimiter(60_000, 24);
 const adminLoginRateLimit = createRateLimiter(15 * 60_000, 8);
 app.use('/api/ai', aiRateLimit);
 registerLiveMapRoutes(app);
-
-let geminiClient: GoogleGenAI | null = null;
-function getGemini(): GoogleGenAI | null {
-  if (!geminiClient && process.env.GEMINI_API_KEY) {
-    geminiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-  }
-  return geminiClient;
-}
 
 function getBearerToken(req: express.Request): string | null {
   const header = req.headers.authorization;
@@ -83,11 +73,7 @@ async function getAuthenticatedUser(req: express.Request) {
 function createUserScopedClient(token: string) {
   return createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     global: { headers: { Authorization: `Bearer ${token}` } },
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 }
 
@@ -99,56 +85,16 @@ function constantTimeEqual(a: string, b: string) {
 }
 
 const LANGUAGE_NAMES: Record<string, string> = {
-  en: 'English',
-  hi: 'Hindi',
-  bn: 'Bengali',
-  mr: 'Marathi',
-  ta: 'Tamil',
-  te: 'Telugu',
-  kn: 'Kannada',
-  gu: 'Gujarati',
-  pa: 'Punjabi',
+  en: 'English', hi: 'Hindi', bn: 'Bengali', mr: 'Marathi', ta: 'Tamil',
+  te: 'Telugu', kn: 'Kannada', gu: 'Gujarati', pa: 'Punjabi',
 };
-
-const TTS_LANGUAGE_CODES: Record<string, string | undefined> = {
-  en: 'en-IN',
-  hi: 'hi-IN',
-  bn: 'bn-IN',
-  mr: 'mr-IN',
-  ta: 'ta-IN',
-  te: 'te-IN',
-  kn: 'kn-IN',
-  gu: 'gu-IN',
-  pa: undefined,
-};
-
-function pcmToWav(pcm: Buffer, sampleRate = 24000, channels = 1, bitsPerSample = 16) {
-  const bytesPerSample = bitsPerSample / 8;
-  const blockAlign = channels * bytesPerSample;
-  const byteRate = sampleRate * blockAlign;
-  const header = Buffer.alloc(44);
-  header.write('RIFF', 0);
-  header.writeUInt32LE(36 + pcm.length, 4);
-  header.write('WAVE', 8);
-  header.write('fmt ', 12);
-  header.writeUInt32LE(16, 16);
-  header.writeUInt16LE(1, 20);
-  header.writeUInt16LE(channels, 22);
-  header.writeUInt32LE(sampleRate, 24);
-  header.writeUInt32LE(byteRate, 28);
-  header.writeUInt16LE(blockAlign, 32);
-  header.writeUInt16LE(bitsPerSample, 34);
-  header.write('data', 36);
-  header.writeUInt32LE(pcm.length, 40);
-  return Buffer.concat([header, pcm]);
-}
 
 app.get('/api/health', (_req, res) => {
   res.json({
     status: 'ok',
     service: 'NIRNAY AI Server',
     backend: 'Express + Supabase PostgreSQL',
-    hasGeminiApiKey: Boolean(process.env.GEMINI_API_KEY),
+    hasOpenAiApiKey: Boolean(process.env.OPENAI_API_KEY),
     hasDataGovApiKey: Boolean(process.env.DATA_GOV_IN_API_KEY),
     hasSupabase: Boolean(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY),
     hasAdminIdLogin: Boolean(ADMIN_LOGIN_ID && ADMIN_LOGIN_EMAIL),
@@ -158,75 +104,38 @@ app.get('/api/health', (_req, res) => {
 app.get('/api/auth/me', async (req, res) => {
   const auth = await getAuthenticatedUser(req);
   if (!auth) return res.status(401).json({ authenticated: false });
-
   const scoped = createUserScopedClient(auth.token);
   const { data: profile, error } = await scoped
     .from('profiles')
     .select('id, display_name, email, phone, role, preferred_language')
     .eq('id', auth.user.id)
     .single();
-
   if (error || !profile) return res.status(403).json({ authenticated: true, profile: null });
   return res.json({ authenticated: true, profile });
 });
 
-/**
- * Single-admin ID/password login.
- * ADMIN_LOGIN_ID maps to exactly one Supabase admin email on the server. The
- * password is verified by Supabase Auth and is never stored in this repository.
- * PostgreSQL RLS/allowlist still decides whether the signed-in account is admin.
- */
 app.post('/api/admin/login', adminLoginRateLimit, async (req, res) => {
-  if (!ADMIN_LOGIN_EMAIL) {
-    return res.status(503).json({ error: 'Admin ID login is not configured on the server.' });
-  }
-
+  if (!ADMIN_LOGIN_EMAIL) return res.status(503).json({ error: 'Admin ID login is not configured on the server.' });
   const loginId = typeof req.body?.loginId === 'string' ? req.body.loginId.trim() : '';
   const password = typeof req.body?.password === 'string' ? req.body.password : '';
-  if (!loginId || !password || password.length > 200) {
-    return res.status(400).json({ error: 'Admin ID and password are required.' });
-  }
-  if (!constantTimeEqual(loginId, ADMIN_LOGIN_ID)) {
-    return res.status(401).json({ error: 'Invalid admin ID or password.' });
-  }
-
+  if (!loginId || !password || password.length > 200) return res.status(400).json({ error: 'Admin ID and password are required.' });
+  if (!constantTimeEqual(loginId, ADMIN_LOGIN_ID)) return res.status(401).json({ error: 'Invalid admin ID or password.' });
   const adminAuthClient = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
-  const { data, error } = await adminAuthClient.auth.signInWithPassword({
-    email: ADMIN_LOGIN_EMAIL,
-    password,
-  });
-  if (error || !data.session || !data.user) {
-    return res.status(401).json({ error: 'Invalid admin ID or password.' });
-  }
-
+  const { data, error } = await adminAuthClient.auth.signInWithPassword({ email: ADMIN_LOGIN_EMAIL, password });
+  if (error || !data.session || !data.user) return res.status(401).json({ error: 'Invalid admin ID or password.' });
   const scoped = createUserScopedClient(data.session.access_token);
-  const { data: profile, error: profileError } = await scoped
-    .from('profiles')
-    .select('role')
-    .eq('id', data.user.id)
-    .single();
-  if (profileError || profile?.role !== 'admin') {
-    return res.status(403).json({ error: 'This account is not the authorised Nirnay AI administrator.' });
-  }
-
+  const { data: profile, error: profileError } = await scoped.from('profiles').select('role').eq('id', data.user.id).single();
+  if (profileError || profile?.role !== 'admin') return res.status(403).json({ error: 'This account is not the authorised Nirnay AI administrator.' });
   res.setHeader('Cache-Control', 'no-store');
-  return res.json({
-    accessToken: data.session.access_token,
-    refreshToken: data.session.refresh_token,
-    expiresAt: data.session.expires_at,
-  });
+  return res.json({ accessToken: data.session.access_token, refreshToken: data.session.refresh_token, expiresAt: data.session.expires_at });
 });
 
 app.post('/api/ai/analyze', async (req, res) => {
   const auth = await getAuthenticatedUser(req);
-  const ai = getGemini();
-
   if (!auth) return res.json({ demoMode: true, isAiGenerated: false, requiresAuth: true });
-  if (!ai || !process.env.GEMINI_API_KEY) {
-    return res.json({ demoMode: true, isAiGenerated: false, requiresGeminiKey: true });
-  }
+  if (!openai) return res.status(503).json({ error: 'OpenAI is not configured on the server.' });
 
   const formData = req.body;
   if (!formData || typeof formData !== 'object' || !formData.category || !formData.location) {
@@ -265,41 +174,40 @@ Return valid JSON only with this schema:
   "localOpportunity": {"demandSignal": "string","competitorDensity": "string","marketGap": "string","recommendedRadius": "string","suggestedProductMix": ["string"]}
 }`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: { responseMimeType: 'application/json' },
+    const response = await openai.chat.completions.create({
+      model: OPENAI_MODEL,
+      temperature: 0.2,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: 'Return only valid JSON. Do not use markdown fences.' },
+        { role: 'user', content: prompt },
+      ],
     });
-    const parsed = JSON.parse(response.text || '{}');
+    const parsed = JSON.parse(response.choices[0]?.message?.content || '{}');
     return res.json({ ...parsed, isAiGenerated: true });
   } catch (err) {
     console.error('Error generating AI analysis:', err);
-    return res.json({ demoMode: true, isAiGenerated: false });
+    return res.status(502).json({ error: 'OpenAI analysis failed.' });
   }
 });
 
 app.post('/api/ai/chat', async (req, res) => {
   const auth = await getAuthenticatedUser(req);
-  const ai = getGemini();
-
   if (!auth) return res.json({ demoMode: true, requiresAuth: true });
-  if (!ai || !process.env.GEMINI_API_KEY) return res.json({ demoMode: true, requiresGeminiKey: true });
+  if (!openai) return res.status(503).json({ error: 'OpenAI is not configured on the server.' });
 
   const { question, context = {}, history = [] } = req.body as {
     question?: string;
     context?: Record<string, unknown>;
     history?: Array<{ role?: string; text?: string }>;
   };
-  if (!question || typeof question !== 'string' || question.trim().length === 0) {
-    return res.status(400).json({ error: 'Question is required.' });
-  }
+  if (!question || typeof question !== 'string' || question.trim().length === 0) return res.status(400).json({ error: 'Question is required.' });
   if (question.length > 3000) return res.status(413).json({ error: 'Question is too long.' });
 
   const languageCode = typeof context.language === 'string' ? context.language : 'en';
   const languageName = LANGUAGE_NAMES[languageCode] || 'English';
   const safeHistory = Array.isArray(history)
-    ? history
-        .slice(-10)
+    ? history.slice(-10)
         .filter((item) => item && (item.role === 'user' || item.role === 'assistant') && typeof item.text === 'string')
         .map((item) => `${item.role === 'user' ? 'Entrepreneur' : 'NIRNAY AI'}: ${String(item.text).slice(0, 1200)}`)
         .join('\n')
@@ -344,36 +252,33 @@ RESPONSE RULES
 Return JSON only:
 {"answer":"string","followUps":["3 short follow-up questions in the same selected language"],"confidenceNote":"one short sentence in the same selected language"}`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: { responseMimeType: 'application/json' },
+    const response = await openai.chat.completions.create({
+      model: OPENAI_MODEL,
+      temperature: 0.4,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: 'Return only valid JSON. Do not use markdown fences.' },
+        { role: 'user', content: prompt },
+      ],
     });
-    const parsed = JSON.parse(response.text || '{}') as { answer?: string; followUps?: string[]; confidenceNote?: string };
-    if (!parsed.answer) throw new Error('Gemini returned an empty chat answer.');
-
+    const parsed = JSON.parse(response.choices[0]?.message?.content || '{}') as { answer?: string; followUps?: string[]; confidenceNote?: string };
+    if (!parsed.answer) throw new Error('OpenAI returned an empty chat answer.');
     return res.json({
       answer: parsed.answer,
       followUps: Array.isArray(parsed.followUps) ? parsed.followUps.slice(0, 4) : [],
       confidenceNote: parsed.confidenceNote || '',
-      sources: [
-        'NIRNAY AI advisory context',
-        context.district ? `Entrepreneur profile: ${String(context.district)}` : 'Entrepreneur profile',
-      ],
+      sources: ['NIRNAY AI advisory context', context.district ? `Entrepreneur profile: ${String(context.district)}` : 'Entrepreneur profile'],
     });
   } catch (err) {
     console.error('Error in chat:', err);
-    return res.json({ demoMode: true });
+    return res.status(502).json({ error: 'OpenAI chat failed.' });
   }
 });
 
 app.post('/api/ai/tts', async (req, res) => {
   const auth = await getAuthenticatedUser(req);
-  const ai = getGemini();
   if (!auth) return res.status(401).json({ error: 'Authentication required for AI voice.' });
-  if (!ai || !process.env.GEMINI_API_KEY) {
-    return res.status(503).json({ error: 'AI voice is unavailable because Gemini is not configured.' });
-  }
+  if (!openai) return res.status(503).json({ error: 'AI voice is unavailable because OpenAI is not configured.' });
 
   const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
   const language = typeof req.body?.language === 'string' ? req.body.language : 'en';
@@ -381,28 +286,19 @@ app.post('/api/ai/tts', async (req, res) => {
   if (text.length > 4200) return res.status(413).json({ error: 'Voice text is too long.' });
 
   const languageName = LANGUAGE_NAMES[language] || 'English';
-  const languageCode = TTS_LANGUAGE_CODES[language];
-  const speechConfig: Record<string, unknown> = {
-    voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
-  };
-  if (languageCode) speechConfig.languageCode = languageCode;
-
   try {
     const ttsPrompt = `Speak naturally, clearly and warmly in ${languageName}. Read only the answer below. Do not add commentary, summarize, or translate it into English. Preserve the selected language, numbers and rupee amounts.\n\n${text}`;
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.1-flash-tts-preview',
-      contents: [{ parts: [{ text: ttsPrompt }] }],
-      config: { responseModalities: ['AUDIO'], speechConfig } as any,
+    const audio = await openai.audio.speech.create({
+      model: OPENAI_TTS_MODEL,
+      voice: 'alloy',
+      input: ttsPrompt,
+      response_format: 'wav',
     });
-    const audioPart = response.candidates?.[0]?.content?.parts?.find((part: any) => Boolean(part?.inlineData?.data)) as any;
-    const base64Audio = audioPart?.inlineData?.data;
-    if (!base64Audio) throw new Error('Gemini TTS returned no audio data.');
-
-    const wav = pcmToWav(Buffer.from(base64Audio, 'base64'));
+    const audioBuffer = Buffer.from(await audio.arrayBuffer());
     res.setHeader('Content-Type', 'audio/wav');
     res.setHeader('Cache-Control', 'no-store');
-    res.setHeader('X-Nirnay-Voice-Engine', 'gemini-3.1-flash-tts-preview');
-    return res.send(wav);
+    res.setHeader('X-Nirnay-Voice-Engine', OPENAI_TTS_MODEL);
+    return res.send(audioBuffer);
   } catch (err) {
     console.error('Error generating multilingual AI voice:', err);
     return res.status(502).json({ error: 'AI voice generation failed.' });
@@ -414,13 +310,10 @@ async function startServer() {
     const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' });
     app.use(vite.middlewares);
   } else {
-    // Only the Vite client bundle is publicly served. The server bundle lives in
-    // dist-server and is never exposed by express.static().
     const clientDistPath = path.join(process.cwd(), 'dist', 'client');
     app.use(express.static(clientDistPath, { index: false }));
     app.get('*', (_req, res) => res.sendFile(path.join(clientDistPath, 'index.html')));
   }
-
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`NIRNAY AI server running on http://0.0.0.0:${PORT}`);
   });
